@@ -9,14 +9,30 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@clerk/nextjs": "^6.37.3",
+    "@prisma/adapter-pg": "^7.3.0",
+    "@prisma/client": "^7.3.0",
+    "@yudiel/react-qr-scanner": "^2.5.1",
+    "cloudinary": "^2.9.0",
+    "lucide-react": "^0.563.0",
     "next": "16.1.6",
+    "next-cloudinary": "^6.17.5",
+    "nodemailer": "^8.0.0",
+    "pg": "^8.18.0",
+    "pusher": "^5.3.2",
+    "pusher-js": "^8.4.0",
+    "qrcode.react": "^4.2.0",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "use-debounce": "^10.1.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/node": "25.2.0",
+    "@types/pg": "^8.16.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "prisma": "^7.3.0",
     "tailwindcss": "^4"
   }
 }

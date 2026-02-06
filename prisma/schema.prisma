@@ -1,0 +1,110 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  
+}
+
+model FoundID {
+  id             String   @id @default(cuid())
+  idType         String
+  imageUrl       String
+  region         String
+  locationDetail String
+  notes          String?  @db.Text
+  reporterId     String
+  reporterName   String?
+  status         String   @default("AVAILABLE")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+enum IDStatus {
+  LOST
+  FOUND
+  RETURNED
+}
+
+model LostID {
+  id           String   @id @default(cuid())
+  userId       String   // Clerk User ID
+  idType       String   // National ID, License, etc.
+  fullName     String
+  idNumber     String?
+  description  String?
+  imageUrl     String?
+  lastLocation String
+  dateLost     DateTime
+  status       IDStatus @default(LOST)
+  qrCodeId     String?  @unique
+  createdAt    DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   // The Owner who receives the alert
+  title     String
+  message   String
+  type      String   // "MATCH" or "SYSTEM"
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Item {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  location    String?
+  status      Status   @default(LOST)
+  createdAt   DateTime @default(now())
+}
+
+enum Status {
+  LOST
+  FOUND
+}
+// Add this to your prisma/schema.prisma
+
+model Chat {
+  id        String    @id @default(cuid())
+  reportId  String    // Links to the LostID or FoundID
+  ownerId   String    // The person who lost the ID
+  finderId  String    // The person who found the ID
+  messages  Message[]
+  createdAt DateTime  @default(now())
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  senderId  String   // The Clerk User ID of the sender
+  text      String
+  createdAt DateTime @default(now())
+}
+model FraudReport {
+  id          Int      @id @default(autoincrement())
+  createdAt   DateTime @default(now())
+  issueType   String   // e.g., "Suspicious User", "Extortion"
+  description String   @db.Text
+  evidenceUrl String?  // URL to the uploaded screenshot
+  status      String   @default("PENDING") // PENDING, INVESTIGATING, RESOLVED
+  
+  // Optional: Link to the user who reported it
+  // reporterId  String
+  // reporter    User     @relation(fields: [reporterId], references: [id])
+
+  @@map("fraud_reports") // This maps the model to a lowercase table name in Postgres
+}
+model SupportTicket {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  name      String
+  email     String
+  subject   String
+  message   String   @db.Text
+  status    String   @default("OPEN") // OPEN, CLOSED
+}
