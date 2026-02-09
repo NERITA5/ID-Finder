@@ -1,29 +1,31 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-// 1. ADD YOUR REPORTING ROUTES HERE
+// We use a more aggressive regex to ensure any variation of the reporting path is public
 const isPublicRoute = createRouteMatcher([
   '/', 
-  '/report-found(.*)',      // Allows anyone to access the report page
-  '/scan/(.*)',             // If you use a URL like /scan/[slug]
+  '/report-found(.*)',      // Matches /report-found, /report-found/success, etc.
+  '/reportfound(.*)',       // Catch-all for missing dashes
+  '/scan/(.*)', 
   '/sign-in(.*)', 
   '/sign-up(.*)', 
-  '/forgot-password(.*)'
+  '/forgot-password(.*)',
+  '/api/uploadthing(.*)'    // Allow image uploads if you use UploadThing
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
   const { userId } = await auth();
-  const isAuthPage = request.nextUrl.pathname.startsWith('/sign-in') || 
-                     request.nextUrl.pathname.startsWith('/sign-up');
+  const { pathname } = request.nextUrl;
 
-  // 1. If logged in and trying to access sign-in/up, go to dashboard
+  // 1. Logic for Authenticated users on Auth pages
+  const isAuthPage = pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up');
+  
   if (userId && isAuthPage) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  // 2. Protect private routes
+  // 2. Protect everything EXCEPT the public routes
   if (!isPublicRoute(request)) {
-    // If not logged in, this will automatically redirect to sign-in
     await auth.protect();
   }
 
@@ -32,8 +34,10 @@ export default clerkMiddleware(async (auth, request) => {
 
 export const config = {
   matcher: [
-    // Standard Next.js/Clerk matcher
+    // This regex tells Next.js to run the middleware on all routes 
+    // EXCEPT static files (images, css, etc.)
     '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+    // Always run for API routes
     '/(api|trpc)(.*)',
   ],
 };
