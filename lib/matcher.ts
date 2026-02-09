@@ -10,45 +10,44 @@ export async function checkMatches(newItem: {
   try {
     const isLostReport = newItem.status === "LOST";
     
-    // Normalize inputs for the database query
-    const searchType = newItem.idType.trim();
-    
-    // 1. FETCH CANDIDATES
-    // We use 'mode: insensitive' to ensure 'National ID' matches 'national id'
+    // Standardize the search term (e.g., "National ID Card" becomes "National")
+    // This allows "National ID" and "National ID Card" to find each other.
+    const baseType = newItem.idType.split(" ")[0]; 
+
+    console.log(`[DEBUG] Searching for ${newItem.status} match. Type: ${newItem.idType}, Num: ${newItem.idNumber}`);
+
+    // 1. FETCH CANDIDATES (The "Fuzzy" Fetch)
     const candidates = isLostReport
       ? await prisma.foundID.findMany({
-          where: { 
-            idType: { equals: searchType, mode: 'insensitive' },
-            // Matches both "AVAILABLE" and "FOUND" to be safe
-            status: { in: ["AVAILABLE", "FOUND"] } 
+          where: {
+            idType: { contains: baseType, mode: 'insensitive' },
+            status: { in: ["AVAILABLE", "FOUND"] } // Checks both just in case
           },
         })
       : await prisma.lostID.findMany({
-          where: { 
-            idType: { equals: searchType, mode: 'insensitive' },
-            status: "LOST" 
+          where: {
+            idType: { contains: baseType, mode: 'insensitive' },
+            status: "LOST"
           },
         });
 
-    // Debugging: Log how many records were actually pulled from the DB
-    console.log(`[Matching] Found ${candidates.length} potential ${isLostReport ? 'FOUND' : 'LOST'} candidates in DB.`);
+    console.log(`[DEBUG] DB returned ${candidates.length} potential candidates.`);
 
-    // 2. SCORING LOGIC
     const scoredMatches = candidates.map((candidate: any) => {
       let score = 0;
 
-      // --- ID NUMBER MATCHING (70 Points) ---
+      // --- ID NUMBER (70 Points) ---
+      // We remove ALL non-alphanumeric characters (dashes, spaces, etc)
       if (newItem.idNumber && candidate.idNumber) {
-        // Remove all non-alphanumeric characters (dashes, spaces, dots) for comparison
-        const cleanNewId = newItem.idNumber.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-        const cleanCandId = candidate.idNumber.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-
-        if (cleanNewId === cleanCandId) {
+        const cleanNew = newItem.idNumber.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+        const cleanCand = candidate.idNumber.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+        
+        if (cleanNew === cleanCand) {
           score += 70;
         }
       }
 
-      // --- NAME MATCHING (Max 25 Points) ---
+      // --- FULL NAME (Max 25 Points) ---
       const inputName = newItem.fullName.toLowerCase().trim();
       const candName = candidate.fullName.toLowerCase().trim();
       
@@ -66,22 +65,21 @@ export async function checkMatches(newItem: {
         }
       }
 
-      // --- PLACE OF BIRTH MATCHING (10 Points) ---
+      // --- PLACE OF BIRTH (10 Points) ---
       if (newItem.placeOfBirth && candidate.placeOfBirth) {
-        const inputPOB = newItem.placeOfBirth.toLowerCase().trim();
-        const candPOB = candidate.placeOfBirth.toLowerCase().trim();
-        if (inputPOB === candPOB) score += 10;
+        if (newItem.placeOfBirth.toLowerCase().trim() === candidate.placeOfBirth.toLowerCase().trim()) {
+          score += 10;
+        }
       }
 
       return { ...candidate, matchScore: score };
     });
 
-    // 3. FILTER & SORT
     const finalResults = scoredMatches
       .filter((match) => match.matchScore >= 30)
       .sort((a, b) => b.matchScore - a.matchScore);
 
-    console.log(`[Matching] Results after scoring: ${finalResults.length}`);
+    console.log(`[DEBUG] Final matches after scoring: ${finalResults.length}`);
     return finalResults;
 
   } catch (error) {

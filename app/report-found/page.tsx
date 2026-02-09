@@ -18,7 +18,7 @@ import Link from "next/link";
 import { createWorker } from "tesseract.js";
 import { reportFoundId } from "@/lib/actions";
 
-const ID_TYPES = ["National ID Card", "Passport", "Driver's License", "Student ID", "Voter's Card", "Other"];
+const ID_TYPES = ["National ID", "Passport", "Driver's License", "Student ID", "Voter's Card", "Other"];
 const CAMEROON_REGIONS = ["Adamawa", "Central", "East", "Far North", "Littoral", "North", "Northwest", "South", "Southwest", "West"];
 
 export default function ReportFoundIDPage() {
