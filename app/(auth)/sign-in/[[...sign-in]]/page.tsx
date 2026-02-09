@@ -3,13 +3,23 @@
 import * as React from "react";
 import { useSignIn } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, Search, CreditCard, Loader2, User } from "lucide-react";
+import { 
+  Mail, 
+  Lock, 
+  Search, 
+  CreditCard, 
+  Loader2, 
+  User, 
+  Eye, 
+  EyeOff 
+} from "lucide-react";
 import Link from "next/link";
 
 export default function SignInPage() {
   const { isLoaded, signIn, setActive } = useSignIn();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [showPassword, setShowPassword] = React.useState(false); // Visibility state
   const [loading, setLoading] = React.useState(false);
   const router = useRouter();
 
@@ -26,7 +36,6 @@ export default function SignInPage() {
 
       if (result.status === "complete") {
         await setActive({ session: result.createdSessionId });
-        // Success Logic: Refresh then go to Dashboard
         router.refresh();
         router.push("/dashboard");
       }
@@ -38,8 +47,10 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="min-h-screen flex justify-center bg-slate-100 font-sans">
+    <div className="min-h-screen flex justify-center bg-slate-100 font-sans antialiased">
       <div className="w-full max-w-md bg-white shadow-2xl flex flex-col min-h-screen md:min-h-0 md:h-[850px] md:my-auto md:rounded-[2.5rem] overflow-hidden relative">
+        
+        {/* HEADER */}
         <div className="bg-[#0056d2] pt-8 pb-16 relative">
           <div className="flex justify-center items-center gap-2 relative z-10">
             <div className="bg-white p-1.5 rounded-lg shadow-md">
@@ -50,6 +61,7 @@ export default function SignInPage() {
           <div className="absolute bottom-0 w-full h-12 bg-white rounded-t-[100%] translate-y-6 scale-x-125"></div>
         </div>
 
+        {/* HERO ICON SECTION */}
         <div className="flex flex-col items-center px-8 pt-4">
           <div className="w-40 h-40 bg-blue-50 rounded-full flex items-center justify-center relative mb-6 border-4 border-white shadow-inner">
              <div className="relative">
@@ -62,11 +74,17 @@ export default function SignInPage() {
           <h1 className="text-2xl font-black text-slate-800 text-center leading-tight">Find and Recover Lost IDs</h1>
         </div>
 
+        {/* FORM SECTION */}
         <form onSubmit={handleSignIn} className="px-8 mt-6 space-y-4">
           <div className="relative">
             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500 w-5 h-5 z-10" />
             <input 
-              type="email" placeholder="Email" required value={email} onChange={(e) => setEmail(e.target.value)} disabled={loading}
+              type="email" 
+              placeholder="Email" 
+              required 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)} 
+              disabled={loading}
               className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-blue-500 outline-none font-medium text-slate-800"
             />
           </div>
@@ -74,18 +92,35 @@ export default function SignInPage() {
           <div className="relative">
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500 w-5 h-5 z-10" />
             <input 
-              type="password" placeholder="Password" required value={password} onChange={(e) => setPassword(e.target.value)} disabled={loading}
-              className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-blue-500 outline-none font-medium text-slate-800"
+              type={showPassword ? "text" : "password"} // Toggle input type
+              placeholder="Password" 
+              required 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+              disabled={loading}
+              className="w-full pl-12 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-blue-500 outline-none font-medium text-slate-800"
             />
+            {/* TOGGLE BUTTON */}
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600 transition-colors z-20"
+            >
+              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
           </div>
 
           <div className="text-right">
-            <Link href="/forgot-password" className="text-blue-600 text-xs font-bold hover:underline">
+            <Link href="/forgot-password" disabled={loading} className="text-blue-600 text-xs font-bold hover:underline">
               Forgot password?
             </Link>
           </div>
 
-          <button type="submit" disabled={loading || !isLoaded} className="w-full bg-[#0056d2] hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex justify-center items-center text-lg">
+          <button 
+            type="submit" 
+            disabled={loading || !isLoaded} 
+            className="w-full bg-[#0056d2] hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex justify-center items-center text-lg"
+          >
             {loading ? <Loader2 className="animate-spin w-6 h-6" /> : "Sign In"}
           </button>
 
@@ -96,7 +131,11 @@ export default function SignInPage() {
           </div>
 
           <Link href="/sign-up" className="block w-full">
-            <button type="button" disabled={loading} className="w-full bg-[#2d8a4e] hover:bg-green-700 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all text-lg">
+            <button 
+              type="button" 
+              disabled={loading} 
+              className="w-full bg-[#2d8a4e] hover:bg-green-700 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all text-lg"
+            >
               Sign Up
             </button>
           </Link>

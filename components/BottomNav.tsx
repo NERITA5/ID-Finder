@@ -4,31 +4,58 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Search, MessageCircle, Bell, User } from "lucide-react";
-import { useUser } from "@clerk/nextjs"; // Changed from UserButton to useUser
+import { useUser } from "@clerk/nextjs";
 import { getNotifications } from "@/lib/actions";
+import { pusherClient } from "@/lib/pusher-client"; // Use the client helper
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const { user } = useUser(); // Get user data (image, etc.) directly
+  const { user } = useUser();
+  
+  // State for different types of badges
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [unreadAlerts, setUnreadAlerts] = useState(0);
 
-  // Sync notification badges for Messages
   useEffect(() => {
-    async function checkNotifications() {
+    if (!user?.id) return;
+
+    // 1. Initial Load of counts
+    async function syncCounts() {
       try {
         const notifyData = await getNotifications();
-        const count = notifyData.filter(
+        
+        // Count unread chat messages
+        const msgCount = notifyData.filter(
           (n: any) => n.type === "message" && !n.isRead
         ).length;
-        setUnreadMessages(count);
+        
+        // Count unread ID matches / general alerts
+        const alertCount = notifyData.filter(
+          (n: any) => n.type === "MATCH" && !n.isRead
+        ).length;
+
+        setUnreadMessages(msgCount);
+        setUnreadAlerts(alertCount);
       } catch (err) {
         console.error("Nav sync error:", err);
       }
     }
-    checkNotifications();
-    const interval = setInterval(checkNotifications, 30000);
-    return () => clearInterval(interval);
-  }, []);
+
+    syncCounts();
+
+    // 2. REAL-TIME PUSHER LISTENER
+    // Instead of an interval, we listen for the "new-notification" event
+    const channel = pusherClient.subscribe(`user-alerts-${user.id}`);
+
+    channel.bind("new-notification", () => {
+      // When a new notification arrives, refresh the counts immediately
+      syncCounts();
+    });
+
+    return () => {
+      pusherClient.unsubscribe(`user-alerts-${user.id}`);
+    };
+  }, [user?.id]);
 
   const navItems = [
     { icon: Home, path: "/dashboard", label: "Home" },
@@ -37,9 +64,14 @@ export default function BottomNav() {
       icon: MessageCircle, 
       path: "/conversations", 
       label: "Messages", 
-      hasBadge: unreadMessages > 0 
+      count: unreadMessages 
     },
-    { icon: Bell, path: "/notifications", label: "Alerts" },
+    { 
+      icon: Bell, 
+      path: "/notifications", 
+      label: "Alerts", 
+      count: unreadAlerts 
+    },
     { icon: User, path: "/profile", label: "Profile" },
   ];
 
@@ -48,7 +80,7 @@ export default function BottomNav() {
       {navItems.map((item) => {
         const isActive = pathname === item.path || (item.path === "/conversations" && pathname.startsWith("/chat/"));
         
-        // CUSTOM PROFILE SLOT (Replaced UserButton with a direct Link)
+        // PROFILE SLOT
         if (item.label === "Profile") {
           return (
             <Link
@@ -58,11 +90,7 @@ export default function BottomNav() {
             >
               <div className={`w-7 h-7 rounded-full overflow-hidden border-2 transition-all ${isActive ? 'border-[#0056d2]' : 'border-slate-100'}`}>
                 {user?.imageUrl ? (
-                  <img 
-                    src={user.imageUrl} 
-                    alt="Profile" 
-                    className="w-full h-full object-cover"
-                  />
+                  <img src={user.imageUrl} alt="Profile" className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full bg-slate-100 flex items-center justify-center">
                     <User className="w-4 h-4 text-slate-400" />
@@ -72,14 +100,12 @@ export default function BottomNav() {
               <span className={`text-[10px] mt-1 font-bold uppercase tracking-tighter ${isActive ? 'text-[#0056d2]' : 'text-slate-400'}`}>
                 {item.label}
               </span>
-              {isActive && (
-                <div className="absolute bottom-0 w-10 h-1 bg-[#0056d2] rounded-t-full" />
-              )}
+              {isActive && <div className="absolute bottom-0 w-10 h-1 bg-[#0056d2] rounded-t-full" />}
             </Link>
           );
         }
 
-        // STANDARD NAV ITEMS
+        // STANDARD ITEMS (Home, Search, Messages, Alerts)
         return (
           <Link
             key={item.path}
@@ -92,14 +118,11 @@ export default function BottomNav() {
                 strokeWidth={isActive ? 2.5 : 2}
               />
               
-              {item.label === "Messages" && item.hasBadge && (
-                <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-                  {unreadMessages}
+              {/* DYNAMIC BADGE */}
+              {item.count !== undefined && item.count > 0 && (
+                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-[9px] font-black min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center border-2 border-white shadow-sm animate-in zoom-in">
+                  {item.count > 9 ? "9+" : item.count}
                 </span>
-              )}
-
-              {item.label === "Alerts" && (
-                 <span className="absolute top-0 -right-0.5 bg-red-500 w-2.5 h-2.5 rounded-full border-2 border-white" />
               )}
             </div>
             
@@ -107,9 +130,7 @@ export default function BottomNav() {
               {item.label}
             </span>
 
-            {isActive && (
-              <div className="absolute bottom-0 w-10 h-1 bg-[#0056d2] rounded-t-full" />
-            )}
+            {isActive && <div className="absolute bottom-0 w-10 h-1 bg-[#0056d2] rounded-t-full" />}
           </Link>
         );
       })}

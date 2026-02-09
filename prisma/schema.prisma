@@ -1,30 +1,16 @@
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  
+  // url is now handled in prisma.config.ts
 }
 
-model FoundID {
-  id             String   @id @default(cuid())
-  idType         String
-  imageUrl       String
-  region         String
-  locationDetail String
-  notes          String?  @db.Text
-  reporterId     String
-  reporterName   String?
-  status         String   @default("AVAILABLE")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-}
-
+// --- ID REPORTING ---
 enum IDStatus {
   LOST
-  FOUND
+  AVAILABLE
   RETURNED
 }
 
@@ -34,71 +20,87 @@ model LostID {
   idType       String   // National ID, License, etc.
   fullName     String
   idNumber     String?
+  placeOfBirth String?  
   description  String?
   imageUrl     String?
   lastLocation String
-  dateLost     DateTime
+  dateLost     DateTime @default(now())
   status       IDStatus @default(LOST)
-  qrCodeId     String?  @unique
   createdAt    DateTime @default(now())
 }
 
-model Notification {
+model FoundID {
+  id             String   @id @default(cuid())
+  idType         String
+  fullName       String   
+  idNumber       String?  
+  placeOfBirth   String?  
+  imageUrl       String
+  region         String
+  locationDetail String
+  notes          String?  @db.Text
+  reporterId     String   // Clerk User ID or "anonymous"
+  reporterName   String?
+  status         String   @default("AVAILABLE")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// --- QR SECURE VAULT ---
+model UserVault {
   id        String   @id @default(cuid())
-  userId    String   // The Owner who receives the alert
-  title     String
-  message   String
-  type      String   // "MATCH" or "SYSTEM"
-  isRead    Boolean  @default(false)
+  userId    String   @unique
+  qrSlug    String   @unique @default(uuid()) 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-model Item {
-  id          String   @id @default(cuid())
-  title       String
-  description String?
-  location    String?
-  status      Status   @default(LOST)
-  createdAt   DateTime @default(now())
-}
-
-enum Status {
-  LOST
-  FOUND
-}
-// Add this to your prisma/schema.prisma
-
+// --- REAL-TIME CHAT ---
 model Chat {
-  id        String    @id @default(cuid())
-  reportId  String    // Links to the LostID or FoundID
-  ownerId   String    // The person who lost the ID
-  finderId  String    // The person who found the ID
-  messages  Message[]
-  createdAt DateTime  @default(now())
+  id           String    @id @default(cuid())
+  reportId     String    
+  ownerId      String    
+  finderId     String    
+  participants String[]  
+  messages     Message[]
+  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime  @default(now())
+
+  @@index([participants])
 }
 
 model Message {
   id        String   @id @default(cuid())
   chatId    String
   chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  senderId  String   // The Clerk User ID of the sender
+  senderId  String   
   text      String
   createdAt DateTime @default(now())
 }
+
+// --- SYSTEM ---
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   
+  title     String
+  message   String
+  type      String   
+  metadata  Json?    
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
 model FraudReport {
   id          Int      @id @default(autoincrement())
   createdAt   DateTime @default(now())
-  issueType   String   // e.g., "Suspicious User", "Extortion"
+  issueType   String   
   description String   @db.Text
-  evidenceUrl String?  // URL to the uploaded screenshot
-  status      String   @default("PENDING") // PENDING, INVESTIGATING, RESOLVED
-  
-  // Optional: Link to the user who reported it
-  // reporterId  String
-  // reporter    User     @relation(fields: [reporterId], references: [id])
+  evidenceUrl String?  
+  status      String   @default("PENDING") 
 
-  @@map("fraud_reports") // This maps the model to a lowercase table name in Postgres
+  @@map("fraud_reports")
 }
+
 model SupportTicket {
   id        Int      @id @default(autoincrement())
   createdAt DateTime @default(now())
@@ -106,5 +108,5 @@ model SupportTicket {
   email     String
   subject   String
   message   String   @db.Text
-  status    String   @default("OPEN") // OPEN, CLOSED
+  status    String   @default("OPEN") 
 }

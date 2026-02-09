@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { ChevronLeft, Send, Loader2, CheckCircle, Mail } from "lucide-react";
+import { ChevronLeft, Send, Loader2, CheckCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { sendSupportEmail } from "@/app/actions/support";
 
@@ -21,19 +21,23 @@ export default function ContactPage() {
       message: formData.get("message") as string,
     };
 
-    const result = await sendSupportEmail(data);
-    if (result.success) {
-      setSubmitted(true);
-    } else {
-      alert("Something went wrong. Please try again.");
+    try {
+      const result = await sendSupportEmail(data);
+      if (result.success) {
+        setSubmitted(true);
+      } else {
+        alert("Something went wrong. Please try again.");
+      }
+    } catch (error) {
+      alert("Failed to connect to support server.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  // SUCCESS STATE ADJUSTED
   if (submitted) {
     return (
-      <div className="max-w-md mx-auto h-screen bg-white flex flex-col items-center justify-center p-10 text-center font-sans antialiased">
+      <div className="max-w-md mx-auto h-[100dvh] bg-white flex flex-col items-center justify-center p-10 text-center font-sans antialiased">
         <div className="bg-green-100 p-8 rounded-[2.5rem] mb-6 animate-in zoom-in duration-300">
           <CheckCircle className="w-12 h-12 text-green-600" />
         </div>
@@ -45,20 +49,17 @@ export default function ContactPage() {
         </p>
         
         <button 
-          onClick={() => {
-            // Use replace to clear the form from history and force navigation
-            router.replace("/help");
-          }} 
-          className="mt-10 bg-slate-900 text-white w-full py-5 rounded-[2rem] font-black uppercase italic text-[11px] tracking-widest active:scale-95 transition-all shadow-xl shadow-slate-200"
+          onClick={() => router.replace("/dashboard")} 
+          className="mt-10 bg-[#1a1c2e] text-white w-full py-5 rounded-[2rem] font-black uppercase italic text-[11px] tracking-widest active:scale-95 transition-all shadow-xl shadow-slate-200"
         >
-          Back to Help Center
+          Back to Dashboard
         </button>
       </div>
     );
   }
 
   return (
-    <div className="max-w-md mx-auto bg-white min-h-screen pb-10 font-sans antialiased">
+    <div className="max-w-md mx-auto bg-white min-h-screen pb-10 font-sans antialiased border-x border-slate-100">
       {/* HEADER */}
       <div className="p-6 pt-12 flex items-center gap-4 border-b border-slate-50 sticky top-0 bg-white z-20">
         <button 
@@ -78,7 +79,7 @@ export default function ContactPage() {
             name="name" 
             required 
             placeholder="John Doe"
-            className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" 
+            className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all" 
           />
         </div>
 
@@ -89,7 +90,7 @@ export default function ContactPage() {
             type="email" 
             required 
             placeholder="john@example.com"
-            className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" 
+            className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all" 
           />
         </div>
 
@@ -99,7 +100,7 @@ export default function ContactPage() {
             name="subject" 
             required 
             placeholder="Matching issue / Account help"
-            className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" 
+            className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all" 
           />
         </div>
 
@@ -109,13 +110,13 @@ export default function ContactPage() {
             name="message" 
             required 
             placeholder="Tell us how we can help..."
-            className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all min-h-[150px] resize-none" 
+            className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all min-h-[150px] resize-none" 
           />
         </div>
 
         <button 
           disabled={loading} 
-          className="w-full bg-slate-900 text-white py-5 rounded-[2rem] font-black uppercase italic shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-50"
+          className="w-full bg-[#1a1c2e] text-white py-5 rounded-[2rem] font-black uppercase italic shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-50"
         >
           {loading ? (
             <Loader2 className="animate-spin w-5 h-5" />

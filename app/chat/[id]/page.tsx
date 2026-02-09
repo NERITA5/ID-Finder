@@ -15,7 +15,6 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 1. Initial Load & Real-time Subscription
   useEffect(() => {
     async function fetchHistory() {
       try {
@@ -30,7 +29,6 @@ export default function ChatPage() {
     
     if (id) fetchHistory();
 
-    // Ensure Pusher only initializes if keys exist
     if (!process.env.NEXT_PUBLIC_PUSHER_KEY) return;
 
     const pusher = new PusherClient(process.env.NEXT_PUBLIC_PUSHER_KEY, {
@@ -52,7 +50,6 @@ export default function ChatPage() {
     };
   }, [id]);
 
-  // 2. Smooth Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -67,7 +64,6 @@ export default function ChatPage() {
     const tempId = Date.now().toString();
     setInput(""); 
 
-    // Optimistic UI Update
     const optimisticMsg = {
       id: tempId,
       senderId: user.id,
@@ -88,14 +84,9 @@ export default function ChatPage() {
 
   return (
     <div className="max-w-md mx-auto bg-slate-50 h-[100dvh] flex flex-col font-sans border-x border-slate-200 overflow-hidden">
-      
-      {/* HEADER */}
       <header className="bg-white/90 backdrop-blur-md p-5 pt-12 flex items-center justify-between border-b border-slate-100 sticky top-0 z-30">
         <div className="flex items-center gap-3">
-          <button 
-            onClick={() => router.back()} 
-            className="bg-slate-50 p-2 rounded-xl active:scale-90 transition-all"
-          >
+          <button onClick={() => router.back()} className="bg-slate-50 p-2 rounded-xl active:scale-90 transition-all">
             <ChevronLeft className="w-5 h-5 text-slate-600" />
           </button>
           <div>
@@ -104,7 +95,7 @@ export default function ChatPage() {
             </h1>
             <div className="flex items-center gap-1 mt-1">
               <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-              <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest italic tracking-tighter">Secure Handover</span>
+              <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest italic">Secure Handover</span>
             </div>
           </div>
         </div>
@@ -113,19 +104,14 @@ export default function ChatPage() {
         </button>
       </header>
 
-      {/* SAFETY WARNING */}
       <div className="bg-[#fff4e5] p-3 flex gap-3 items-center border-b border-orange-100">
         <ShieldCheck className="w-4 h-4 text-orange-600 shrink-0" />
         <p className="text-[9px] text-orange-900 font-black uppercase leading-tight italic">
-          Meet in public places (e.g., Malls, Police Stations) for your safety.
+          Meet in public places (e.g., Police Stations) for your safety.
         </p>
       </div>
 
-      {/* MESSAGES */}
-      <main 
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50/50 scroll-smooth"
-      >
+      <main ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50/50 scroll-smooth">
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full opacity-30">
             <Loader2 className="w-6 h-6 animate-spin mb-2 text-blue-600" />
@@ -137,9 +123,7 @@ export default function ChatPage() {
             return (
               <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
                 <div className={`max-w-[85%] p-4 rounded-[1.8rem] text-[13px] font-bold shadow-sm relative transition-all ${
-                  isMe 
-                    ? "bg-[#1a1c2e] text-white rounded-tr-none" 
-                    : "bg-white text-slate-700 rounded-tl-none border border-slate-100"
+                  isMe ? "bg-[#1a1c2e] text-white rounded-tr-none" : "bg-white text-slate-700 rounded-tl-none border border-slate-100"
                 } ${msg.isOptimistic ? "opacity-50" : "opacity-100"}`}>
                   {msg.text}
                   <p className={`text-[7px] font-black uppercase mt-2 opacity-40 ${isMe ? "text-right" : "text-left"}`}>
@@ -152,15 +136,9 @@ export default function ChatPage() {
         )}
       </main>
 
-      {/* INPUT */}
       <footer className="bg-white p-5 pb-8 border-t border-slate-100">
-        <form 
-          onSubmit={handleSendMessage}
-          className="bg-slate-50 rounded-[2rem] p-1.5 flex items-center gap-2 border border-slate-200 focus-within:bg-white focus-within:border-blue-500 transition-all"
-        >
-          <button type="button" className="p-3 text-slate-400 hover:text-blue-600">
-            <MapPin className="w-5 h-5" />
-          </button>
+        <form onSubmit={handleSendMessage} className="bg-slate-50 rounded-[2rem] p-1.5 flex items-center gap-2 border border-slate-200 focus-within:bg-white focus-within:border-blue-500 transition-all">
+          <button type="button" className="p-3 text-slate-400 hover:text-blue-600"><MapPin className="w-5 h-5" /></button>
           <input 
             type="text" 
             value={input}
@@ -168,11 +146,7 @@ export default function ChatPage() {
             placeholder="Discuss handover details..."
             className="flex-1 bg-transparent py-2 text-xs font-bold outline-none placeholder:text-slate-300"
           />
-          <button 
-            type="submit"
-            disabled={!input.trim()}
-            className="bg-[#0056d2] text-white p-3.5 rounded-full active:scale-95 disabled:opacity-20 shadow-lg shadow-blue-200"
-          >
+          <button type="submit" disabled={!input.trim()} className="bg-[#0056d2] text-white p-3.5 rounded-full active:scale-95 disabled:opacity-20 shadow-lg shadow-blue-200">
             <Send className="w-4 h-4" />
           </button>
         </form>

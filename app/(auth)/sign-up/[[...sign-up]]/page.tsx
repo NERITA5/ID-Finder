@@ -3,18 +3,31 @@
 import * as React from "react";
 import { useSignUp } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, Search, ShieldPlus, Loader2, User } from "lucide-react";
+import { 
+  Mail, 
+  Lock, 
+  Search, 
+  ShieldPlus, 
+  Loader2, 
+  User, 
+  Info, 
+  RefreshCcw, 
+  Eye, 
+  EyeOff 
+} from "lucide-react";
 import Link from "next/link";
 
 export default function SignUpPage() {
   const { isLoaded, signUp, setActive } = useSignUp();
   const [emailAddress, setEmailAddress] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [showPassword, setShowPassword] = React.useState(false); // New state for visibility
   const [firstName, setFirstName] = React.useState("");
   const [lastName, setLastName] = React.useState("");
   const [pendingVerification, setPendingVerification] = React.useState(false);
   const [code, setCode] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  const [resending, setResending] = React.useState(false);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -48,7 +61,6 @@ export default function SignUpPage() {
       const completeSignUp = await signUp.attemptEmailAddressVerification({ code });
       if (completeSignUp.status === "complete") {
         await setActive({ session: completeSignUp.createdSessionId });
-        // Success Logic: Refresh then go to Dashboard
         router.refresh();
         router.push("/dashboard");
       }
@@ -59,9 +71,24 @@ export default function SignUpPage() {
     }
   };
 
+  const handleResendCode = async () => {
+    if (!isLoaded) return;
+    setResending(true);
+    try {
+      await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+      alert("A new code has been sent to your email.");
+    } catch (err: any) {
+      alert(err.errors?.[0]?.message || "Error resending code.");
+    } finally {
+      setResending(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen flex justify-center bg-slate-100 font-sans">
+    <div className="min-h-screen flex justify-center bg-slate-100 font-sans antialiased">
       <div className="w-full max-w-md bg-white shadow-2xl flex flex-col min-h-screen md:min-h-0 md:h-[850px] md:my-auto md:rounded-[2.5rem] overflow-hidden relative">
+        
+        {/* HEADER */}
         <div className="bg-[#0056d2] pt-8 pb-16 relative">
           <div className="flex justify-center items-center gap-2 relative z-10">
             <div className="bg-white p-1.5 rounded-lg shadow-md">
@@ -73,14 +100,17 @@ export default function SignUpPage() {
         </div>
 
         <div className="flex flex-col items-center px-8 pt-4">
-          <div className="w-36 h-36 bg-green-50 rounded-full flex items-center justify-center relative mb-4 border-4 border-white shadow-inner">
-             <ShieldPlus className="w-16 h-16 text-green-600" />
+          <div className="w-32 h-32 bg-green-50 rounded-full flex items-center justify-center relative mb-4 border-4 border-white shadow-inner">
+             <ShieldPlus className="w-14 h-14 text-green-600" />
           </div>
-          <h1 className="text-2xl font-black text-slate-800 text-center leading-tight">Create Your Account</h1>
+          <h1 className="text-2xl font-black text-slate-800 text-center leading-tight">
+            {pendingVerification ? "Verify Email" : "Create Your Account"}
+          </h1>
         </div>
 
         <div className="px-8 mt-6">
           {!pendingVerification ? (
+            /* SIGN UP FORM */
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -104,12 +134,24 @@ export default function SignUpPage() {
                 />
               </div>
 
+              {/* PASSWORD INPUT WITH TOGGLE */}
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 w-4 h-4" />
                 <input 
-                  type="password" placeholder="Create Password" required value={password} onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none text-sm font-medium"
+                  type={showPassword ? "text" : "password"} 
+                  placeholder="Create Password" 
+                  required 
+                  value={password} 
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pl-11 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none text-sm font-medium"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
 
               <button type="submit" disabled={loading} className="w-full bg-[#2d8a4e] hover:bg-[#236b3d] text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex justify-center items-center text-lg mt-4">
@@ -117,15 +159,39 @@ export default function SignUpPage() {
               </button>
             </form>
           ) : (
-            <form onSubmit={onPressVerify} className="space-y-6 text-center animate-in fade-in zoom-in duration-300">
-              <input 
-                value={code} placeholder="000000" maxLength={6} onChange={(e) => setCode(e.target.value)}
-                className="w-full px-4 py-5 bg-slate-50 border-2 border-blue-500 rounded-2xl text-center text-3xl font-black tracking-[0.5em] outline-none"
-              />
-              <button type="submit" className="w-full bg-[#0056d2] text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all">
-                {loading ? <Loader2 className="animate-spin mx-auto w-6 h-6" /> : "COMPLETE SIGN UP"}
+            /* VERIFICATION FORM (OTP) */
+            <div className="space-y-6 animate-in fade-in zoom-in duration-300">
+              <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl flex items-start gap-3">
+                <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                <p className="text-[11px] font-bold text-blue-700 leading-tight uppercase">
+                  Please check your email for a verification code.
+                </p>
+              </div>
+
+              <form onSubmit={onPressVerify} className="space-y-4 text-center">
+                <input 
+                  value={code} placeholder="000000" maxLength={6} onChange={(e) => setCode(e.target.value)}
+                  className="w-full px-4 py-5 bg-slate-50 border-2 border-blue-500 rounded-2xl text-center text-3xl font-black tracking-[0.5em] outline-none"
+                />
+                
+                <p className="text-[9px] font-black text-slate-400 tracking-widest uppercase">
+                  Code expires in <span className="text-orange-500">10 minutes</span>
+                </p>
+
+                <button type="submit" disabled={loading} className="w-full bg-[#0056d2] text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex justify-center items-center">
+                  {loading ? <Loader2 className="animate-spin w-6 h-6" /> : "COMPLETE SIGN UP"}
+                </button>
+              </form>
+
+              <button 
+                onClick={handleResendCode}
+                disabled={resending}
+                className="flex items-center justify-center gap-2 mx-auto text-[10px] font-black text-slate-500 hover:text-blue-600 transition-colors uppercase tracking-widest"
+              >
+                {resending ? <Loader2 className="animate-spin w-3 h-3" /> : <RefreshCcw className="w-3 h-3" />}
+                Resend Code
               </button>
-            </form>
+            </div>
           )}
         </div>
 
