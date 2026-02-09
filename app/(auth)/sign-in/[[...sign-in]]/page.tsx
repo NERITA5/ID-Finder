@@ -19,7 +19,7 @@ export default function SignInPage() {
   const { isLoaded, signIn, setActive } = useSignIn();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [showPassword, setShowPassword] = React.useState(false); // Visibility state
+  const [showPassword, setShowPassword] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const router = useRouter();
 
@@ -85,22 +85,21 @@ export default function SignInPage() {
               value={email} 
               onChange={(e) => setEmail(e.target.value)} 
               disabled={loading}
-              className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-blue-500 outline-none font-medium text-slate-800"
+              className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-blue-500 outline-none font-medium text-slate-800 transition-all"
             />
           </div>
 
           <div className="relative">
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500 w-5 h-5 z-10" />
             <input 
-              type={showPassword ? "text" : "password"} // Toggle input type
+              type={showPassword ? "text" : "password"} 
               placeholder="Password" 
               required 
               value={password} 
               onChange={(e) => setPassword(e.target.value)} 
               disabled={loading}
-              className="w-full pl-12 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-blue-500 outline-none font-medium text-slate-800"
+              className="w-full pl-12 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-blue-500 outline-none font-medium text-slate-800 transition-all"
             />
-            {/* TOGGLE BUTTON */}
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
@@ -111,7 +110,11 @@ export default function SignInPage() {
           </div>
 
           <div className="text-right">
-            <Link href="/forgot-password" disabled={loading} className="text-blue-600 text-xs font-bold hover:underline">
+            {/* FIXED: Removed 'disabled' prop and added conditional styling */}
+            <Link 
+              href="/forgot-password" 
+              className={`text-blue-600 text-xs font-bold hover:underline transition-all ${loading ? "pointer-events-none opacity-50" : ""}`}
+            >
               Forgot password?
             </Link>
           </div>
@@ -119,7 +122,7 @@ export default function SignInPage() {
           <button 
             type="submit" 
             disabled={loading || !isLoaded} 
-            className="w-full bg-[#0056d2] hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex justify-center items-center text-lg"
+            className="w-full bg-[#0056d2] hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex justify-center items-center text-lg disabled:bg-slate-300 disabled:shadow-none"
           >
             {loading ? <Loader2 className="animate-spin w-6 h-6" /> : "Sign In"}
           </button>
@@ -130,10 +133,12 @@ export default function SignInPage() {
             <hr className="flex-1 border-slate-100" />
           </div>
 
-          <Link href="/sign-up" className="block w-full">
+          <Link 
+            href="/sign-up" 
+            className={`block w-full transition-all ${loading ? "pointer-events-none opacity-50" : ""}`}
+          >
             <button 
               type="button" 
-              disabled={loading} 
               className="w-full bg-[#2d8a4e] hover:bg-green-700 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all text-lg"
             >
               Sign Up

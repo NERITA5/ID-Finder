@@ -24,6 +24,7 @@ model LostID {
   description  String?
   imageUrl     String?
   lastLocation String
+  qrCodeId       String?
   dateLost     DateTime @default(now())
   status       IDStatus @default(LOST)
   createdAt    DateTime @default(now())

@@ -14,12 +14,11 @@ import { v4 as uuidv4 } from "uuid";
 // PUBLIC ACTION: Used by the Finder (Guest) to see if a QR is valid
 export async function getVaultBySlug(slug: string) {
   try {
-    // No auth() check here because guests need to access this
     const vault = await prisma.userVault.findUnique({
       where: { qrSlug: slug },
       select: {
         id: true,
-        userId: true, // Needed to know who to notify
+        userId: true, 
         createdAt: true,
       }
     });
@@ -85,7 +84,6 @@ export async function createLostReport(formData: {
       },
     });
 
-    // Run matcher logic
     const matches = await checkMatches({
       idType: formData.idType,
       fullName: formData.fullName,
@@ -125,7 +123,8 @@ export async function reportFoundId(formData: {
   region: string;
   locationDetail: string;
   reporterName: string;
-  targetOwnerId?: string; // Comes from the Vault Slug scan
+  targetOwnerId?: string; // Derived from scanning the QR
+  vaultSlug?: string;     // Added: the QR slug itself
 }) {
   try {
     const { userId: reporterId } = await auth();
@@ -153,13 +152,17 @@ export async function reportFoundId(formData: {
           title: "Your Protected ID was Found!",
           message: `Someone scanned your QR sticker and reported your ${formData.idType} found in ${formData.region}.`,
           type: "MATCH",
-          metadata: { reportId: newFoundItem.id, senderId: reporterId || "anonymous" } as any
+          metadata: { 
+            reportId: newFoundItem.id, 
+            senderId: reporterId || "anonymous",
+            vaultSlug: formData.vaultSlug 
+          } as any
         }
       });
       await pusherServer.trigger(`user-alerts-${formData.targetOwnerId}`, "new-notification", {});
     }
 
-    // 2. Global Matching (for people who didn't use QR)
+    // 2. Global Matching
     const directMatches = await prisma.lostID.findMany({
       where: {
         idType: formData.idType,
@@ -174,7 +177,6 @@ export async function reportFoundId(formData: {
     if (directMatches.length > 0) {
       await Promise.all(
         directMatches.map(async (match) => {
-          // Skip if we already notified them via the targetOwnerId logic
           if (match.userId === formData.targetOwnerId) return;
 
           await prisma.notification.create({
@@ -193,6 +195,7 @@ export async function reportFoundId(formData: {
 
     revalidatePath("/dashboard");
     revalidatePath("/my-reports");
+    revalidatePath("/search");
     return { success: true, matchCount: directMatches.length };
   } catch (error) {
     console.error("Found ID Error:", error);

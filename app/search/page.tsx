@@ -1,19 +1,43 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import { Search, ChevronLeft, MapPin, Loader2, AlertCircle, ArrowRight, Compass, Target } from "lucide-react";
+
+import React, { useState, useEffect, Suspense } from "react";
+import { 
+  Search, 
+  ChevronLeft, 
+  MapPin, 
+  Loader2, 
+  AlertCircle, 
+  ArrowRight, 
+  Compass, 
+  Target 
+} from "lucide-react";
 import Link from "next/link";
 import { searchReports, getRecentReports } from "../../lib/actions"; 
 import { useDebounce } from "use-debounce";
 
+// 1. MAIN EXPORT WRAPPED IN SUSPENSE (Required for build success)
 export default function SearchPage() {
-  const [activeTab, setActiveTab] = useState("nearby"); // Default to Nearby
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-[#f8f9ff]">
+        <Loader2 className="w-8 h-8 animate-spin text-[#0056d2]" />
+      </div>
+    }>
+      <SearchContent />
+    </Suspense>
+  );
+}
+
+// 2. THE CONTENT COMPONENT
+function SearchContent() {
+  const [activeTab, setActiveTab] = useState("nearby");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [userCity, setUserCity] = useState<string | null>(null);
   const [debouncedQuery] = useDebounce(query, 400);
 
-  // --- 1. GEOLOCATION TRIGGER (Strictly for Nearby) ---
+  // --- GEOLOCATION TRIGGER ---
   const handleDetectLocation = () => {
     setLoading(true);
     if (!navigator.geolocation) {
@@ -22,49 +46,50 @@ export default function SearchPage() {
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(async (position) => {
-      const { latitude, longitude } = position.coords;
-      try {
-        // Reverse Geocode to get City Name
-        const res = await fetch(
-          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
-        );
-        const data = await res.json();
-        const city = data.city || data.locality || data.principalSubdivision;
-        
-        setUserCity(city);
-        // Automatically fetch IDs found in this specific city
-        const nearbyData = await searchReports(city);
-        setResults(nearbyData || []);
-      } catch (err) {
-        console.error("Location detection failed", err);
-      } finally {
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const res = await fetch(
+            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+          );
+          const data = await res.json();
+          const city = data.city || data.locality || data.principalSubdivision;
+          
+          setUserCity(city);
+          // Fetch nearby IDs
+          const nearbyData = await searchReports(city);
+          setResults(nearbyData || []);
+        } catch (err) {
+          console.error("Location detection failed", err);
+        } finally {
+          setLoading(false);
+        }
+      },
+      (error) => {
         setLoading(false);
-      }
-    }, (error) => {
-      setLoading(false);
-      alert("Please allow location access to see IDs near you.");
-    });
+        alert("Please allow location access to see IDs near you.");
+      },
+      { timeout: 10000 } // Safety timeout for slow mobile networks
+    );
   };
 
-  // --- 2. TAB SWITCHING LOGIC ---
+  // --- INITIAL DATA LOAD ---
   useEffect(() => {
     const loadInitialData = async () => {
       setLoading(true);
       if (activeTab === "nearby" && !userCity) {
-        // Show general latest IDs until user detects location
         const data = await getRecentReports();
         setResults(data || []);
       } else if (activeTab === "search") {
-        // Clear results when switching to search so user can type fresh
         setResults([]);
       }
       setLoading(false);
     };
     loadInitialData();
-  }, [activeTab]);
+  }, [activeTab, userCity]);
 
-  // --- 3. SEARCH LOGIC (Strictly for Search Tab) ---
+  // --- SEARCH LOGIC ---
   useEffect(() => {
     if (activeTab === "search" && debouncedQuery.length >= 2) {
       const performSearch = async () => {
@@ -80,7 +105,7 @@ export default function SearchPage() {
   return (
     <div className="max-w-md mx-auto bg-[#f8f9ff] min-h-screen pb-24 font-sans">
       
-      {/* STICKY HEADER */}
+      {/* HEADER */}
       <div className="bg-white p-6 pt-12 border-b border-slate-100 sticky top-0 z-30 shadow-sm">
         <div className="flex items-center gap-4 mb-6">
           <Link href="/dashboard" className="bg-slate-50 p-2 rounded-xl active:scale-95 transition-all">
@@ -107,7 +132,7 @@ export default function SearchPage() {
           </button>
         </div>
 
-        {/* CONDITIONAL INPUTS */}
+        {/* INPUTS */}
         <div className="h-14 flex items-center">
           {activeTab === "nearby" ? (
             <button 
@@ -132,7 +157,7 @@ export default function SearchPage() {
         </div>
       </div>
 
-      {/* RESULTS LIST */}
+      {/* RESULTS */}
       <div className="p-5 space-y-4">
         {loading ? (
           <div className="flex flex-col items-center py-20">

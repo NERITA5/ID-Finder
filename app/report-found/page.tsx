@@ -33,7 +33,6 @@ function ReportFoundForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // URL Parameters from QR Scan
   const ownerId = searchParams.get("owner");
   const isFromQR = searchParams.get("from") === "qr";
   const vaultSlug = searchParams.get("vaultSlug");
@@ -57,32 +56,44 @@ function ReportFoundForm() {
     if (file) {
       setImage(file);
       setPreview(URL.createObjectURL(file));
-      // Trigger AI Scan immediately upon upload
       await performOCR(file); 
     }
   };
 
   const performOCR = async (file: File) => {
     setIsScanningOCR(true);
+    let worker;
     try {
-      const worker = await createWorker('eng');
+      // Initialize worker with faster CDN data
+      worker = await createWorker('eng', 1, {
+        cachePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-data@4.0.0/'
+      });
+
       const { data: { text } } = await worker.recognize(file);
       
-      // Basic extraction logic
-      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 3);
-      
-      // Match ID patterns (usually digits)
+      // 1. Passport Detection (MRZ Zone)
+      if (text.includes("P<")) {
+        setIdType("Passport");
+        const mrzLine = text.split('\n').find(l => l.startsWith('P<'));
+        if (mrzLine) {
+          const nameMatch = mrzLine.substring(5).split('<<')[0].replace(/</g, ' ');
+          setFullName(nameMatch);
+        }
+      }
+
+      // 2. ID Number Extraction (Look for 8+ consecutive digits)
       const idMatch = text.match(/\d{8,}/); 
-      if (idMatch) setIdNumber(idMatch[0]);
+      if (idMatch && !idNumber) setIdNumber(idMatch[0]);
 
-      // Simple heuristic: First all-caps line is usually the name
+      // 3. Name Extraction (Look for high-confidence uppercase lines)
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
       const nameGuess = lines.find(line => /^[A-Z\s\-]{10,}$/.test(line));
-      if (nameGuess) setFullName(nameGuess);
+      if (nameGuess && !fullName) setFullName(nameGuess);
 
-      await worker.terminate();
     } catch (error) {
-      console.error("OCR Scan Failed:", error);
+      console.error("OCR Error:", error);
     } finally {
+      if (worker) await worker.terminate();
       setIsScanningOCR(false);
     }
   };
@@ -101,7 +112,6 @@ function ReportFoundForm() {
       const data = await response.json();
       return data.secure_url; 
     } catch (error) {
-      console.error("Upload failed", error);
       return null;
     }
   };
@@ -112,7 +122,6 @@ function ReportFoundForm() {
 
     try {
       const uploadedImageUrl = await uploadImageToCloudinary();
-      
       const result = await reportFoundId({
         idType,
         fullName,
@@ -120,7 +129,7 @@ function ReportFoundForm() {
         imageUrl: uploadedImageUrl || "",
         region,
         locationDetail,
-        ownerId: ownerId || undefined, // Direct notify if QR
+        targetOwnerId: ownerId || undefined,
         vaultSlug: vaultSlug || undefined,
         reporterName: "Good Samaritan",
       });
@@ -147,7 +156,7 @@ function ReportFoundForm() {
         </h2>
         <p className="text-slate-500 font-bold mt-4 tracking-tight leading-relaxed">
           {isFromQR 
-            ? "A secure notification was sent to the owner. Thank you for your honesty!" 
+            ? "A secure notification was sent to the owner's vault. Thank you for your kindness!" 
             : "The system is now scanning for a match in our registry."}
         </p>
       </div>
@@ -156,7 +165,6 @@ function ReportFoundForm() {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-12 font-sans antialiased">
-      {/* HEADER */}
       <div className="bg-[#0056d2] p-6 text-white flex items-center justify-between shadow-lg sticky top-0 z-50">
         <div className="flex items-center gap-4">
             <Link href="/" className="p-2 bg-white/10 rounded-2xl active:scale-90 transition-transform">
@@ -167,14 +175,12 @@ function ReportFoundForm() {
         {isFromQR && (
           <div className="flex items-center gap-2 bg-green-500/20 px-3 py-1 rounded-full border border-green-400/30">
             <ShieldCheck className="w-4 h-4 text-green-300" />
-            <span className="text-[10px] font-black uppercase italic text-green-300">Verified QR</span>
+            <span className="text-[10px] font-black uppercase italic text-green-300">QR Active</span>
           </div>
         )}
       </div>
 
       <form onSubmit={handleSubmit} className="p-6 space-y-5 max-w-lg mx-auto">
-        
-        {/* SECTION 1: PHOTO */}
         <div className="space-y-2">
           <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-2">1. Snap ID Photo</label>
           <div 
@@ -201,75 +207,45 @@ function ReportFoundForm() {
           </div>
         </div>
 
-        {/* SECTION 2: IDENTITY */}
         <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-4">
             <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">2. ID Identity Details</label>
-            
             <div className="relative">
               <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500" />
-              <input 
-                placeholder="Full Name on ID" 
-                required 
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700 placeholder:text-slate-300 focus:ring-2 ring-blue-500/20 transition-all"
-                value={fullName} 
-                onChange={(e) => setFullName(e.target.value)} 
-              />
+              <input placeholder="Full Name on ID" required className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700"
+                value={fullName} onChange={(e) => setFullName(e.target.value)} />
             </div>
-
             <div className="relative">
               <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input 
-                placeholder="ID Number" 
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700 placeholder:text-slate-300 focus:ring-2 ring-blue-500/20 transition-all"
-                value={idNumber} 
-                onChange={(e) => setIdNumber(e.target.value)} 
-              />
+              <input placeholder="ID Number" className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700"
+                value={idNumber} onChange={(e) => setIdNumber(e.target.value)} />
             </div>
-
             <div className="relative">
               <FileText className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500" />
-              <select 
-                required 
-                value={idType} 
-                onChange={(e) => setIdType(e.target.value)}
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl font-bold text-slate-700 appearance-none outline-none focus:ring-2 ring-blue-500/20"
-              >
+              <select required value={idType} onChange={(e) => setIdType(e.target.value)}
+                className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl font-bold text-slate-700 appearance-none outline-none">
                 <option value="">Document Category...</option>
                 {ID_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
         </div>
 
-        {/* SECTION 3: LOCATION */}
         <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-4">
             <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">3. Finding Location</label>
             <div className="grid grid-cols-2 gap-3">
-              <select 
-                required 
-                value={region} 
-                onChange={(e) => setRegion(e.target.value)}
-                className="p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 outline-none border-none focus:ring-2 ring-blue-500/20"
-              >
+              <select required value={region} onChange={(e) => setRegion(e.target.value)}
+                className="p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 outline-none border-none">
                 <option value="">Region...</option>
                 {CAMEROON_REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
-              <input 
-                placeholder="Specific Town/Spot" 
-                required 
-                className="p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 outline-none focus:ring-2 ring-blue-500/20"
-                value={locationDetail} 
-                onChange={(e) => setLocationDetail(e.target.value)} 
-              />
+              <input placeholder="Specific Spot" required className="p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 outline-none"
+                value={locationDetail} onChange={(e) => setLocationDetail(e.target.value)} />
             </div>
         </div>
 
-        <button 
-          disabled={loading || !isFormValid || isScanningOCR} 
-          type="submit" 
+        <button disabled={loading || !isFormValid || isScanningOCR} type="submit" 
           className={`w-full py-6 rounded-[2.5rem] font-black shadow-xl transition-all flex justify-center items-center gap-3 text-lg uppercase tracking-widest border-4 border-white/20 active:scale-95 ${
             isFormValid && !isScanningOCR ? 'bg-[#0056d2] text-white' : 'bg-slate-200 text-slate-400'
-          }`}
-        >
+          }`}>
           {loading ? <Loader2 className="animate-spin w-7 h-7" /> : "POST FOUND REPORT"}
         </button>
       </form>
