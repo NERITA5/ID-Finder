@@ -11,24 +11,27 @@ export async function checkMatches(newItem: {
 }) {
   try {
     const isLostReport = newItem.status === "LOST";
-    
-    // Fuzzy type matching: ensure "National ID" and "National" both match.
-    const baseType = newItem.idType?.split(" ")[0].trim() || ""; 
+    const typeSearch = newItem.idType?.trim().substring(0, 4) || ""; 
 
-    // 1. FETCH CANDIDATES
+    console.log(`--- MATCH CHECK START ---`);
+
+    // 1. FETCH CANDIDATES 
+    // This uses 'as any' to prevent the Enum build error you saw earlier
     const candidates = isLostReport
       ? await prisma.foundID.findMany({
           where: {
-            idType: { contains: baseType, mode: 'insensitive' },
-            status: "AVAILABLE"
+            idType: { contains: typeSearch, mode: 'insensitive' },
+            status: "AVAILABLE" as any
           },
         })
       : await prisma.lostID.findMany({
           where: {
-            idType: { contains: baseType, mode: 'insensitive' },
-            status: "LOST"
+            idType: { contains: typeSearch, mode: 'insensitive' },
+            status: "LOST" as any
           },
         });
+
+    console.log(`Candidates found in DB: ${candidates.length}`);
 
     const scoredMatches = candidates.map((candidate: any) => {
       let score = 0;
@@ -37,8 +40,11 @@ export async function checkMatches(newItem: {
       if (newItem.idNumber && candidate.idNumber) {
         const cleanNew = newItem.idNumber.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
         const cleanCand = candidate.idNumber.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-        if (cleanNew === cleanCand && cleanNew.length > 4) {
+        
+        if (cleanNew === cleanCand) {
           score += 60;
+        } else if (cleanNew.includes(cleanCand) || cleanCand.includes(cleanNew)) {
+          if (cleanNew.length > 5) score += 40; 
         }
       }
 
@@ -52,7 +58,8 @@ export async function checkMatches(newItem: {
         const parts1 = name1.split(/\s+/).filter(p => p.length > 2);
         const parts2 = name2.split(/\s+/).filter(p => p.length > 2);
         const common = parts1.filter(p => parts2.includes(p));
-        if (common.length >= 2) score += 20; 
+        if (common.length >= 1) score += 15;
+        if (common.length >= 2) score += 15; 
       }
 
       // --- 3. DATE OF BIRTH (15 Points) ---
@@ -62,7 +69,7 @@ export async function checkMatches(newItem: {
         }
       }
 
-      // --- 4. DATE OF ISSUE/PLACE OF BIRTH (5 Points each) ---
+      // --- 4. DOI / POB (10 Points) ---
       if (newItem.dateOfIssue && candidate.dateOfIssue && newItem.dateOfIssue.trim() === candidate.dateOfIssue.trim()) {
         score += 5;
       }
@@ -74,13 +81,16 @@ export async function checkMatches(newItem: {
     });
 
     const finalResults = scoredMatches
-      .filter((match) => match.matchScore >= 40)
+      .filter((match) => match.matchScore >= 35)
       .sort((a, b) => b.matchScore - a.matchScore);
+
+    console.log(`Final Results Count: ${finalResults.length}`);
+    console.log(`--- MATCH CHECK END ---`);
 
     return finalResults;
 
   } catch (error) {
-    console.error("Match check failed:", error);
+    console.error("CRITICAL: Match check failed:", error);
     return [];
   }
 }

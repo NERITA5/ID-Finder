@@ -13,7 +13,6 @@ import {
   Sparkles,
   ShieldCheck,
   Calendar,
-  MapPinned,
   BellRing
 } from "lucide-react";
 import Link from "next/link";
@@ -37,6 +36,7 @@ function ReportFoundForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
+  // These come from the QR scan URL: /report-found?owner=user_123&vaultSlug=abc-123
   const ownerId = searchParams.get("owner");
   const vaultSlug = searchParams.get("vaultSlug");
 
@@ -70,14 +70,16 @@ function ReportFoundForm() {
       });
       const { data: { text } } = await worker.recognize(file);
       
+      // Basic regex to find 8+ digit numbers (ID numbers)
       const idMatch = text.match(/\d{8,}/); 
       if (idMatch && !idNumber) setIdNumber(idMatch[0]);
 
+      // Logic to find potential names (all caps lines)
       const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
       const nameGuess = lines.find(line => /^[A-Z\s\-]{10,}$/.test(line));
       if (nameGuess && !fullName) setFullName(nameGuess);
     } catch (error) {
-      console.log("OCR failure - fallback to manual");
+      console.log("OCR failure - falling back to manual entry");
     } finally {
       if (worker) await worker.terminate();
       setIsScanningOCR(false);
@@ -101,12 +103,14 @@ function ReportFoundForm() {
         method: "POST",
         body: formData,
     });
+    if (!res.ok) throw new Error("Image upload failed");
     const data = await res.json();
     return data.secure_url;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isFormValid) return;
     setLoading(true);
 
     try {
@@ -130,12 +134,19 @@ function ReportFoundForm() {
       });
 
       if (result.success) {
-        if (result.matchCreated) setMatchFound(true);
+        // The action returns matchCreated true if fuzzy matcher or QR owner found a hit
+        if (result.matchCreated) {
+            setMatchFound(true);
+        }
         setSubmitted(true);
-        setTimeout(() => router.push("/"), 5000);
+        // Navigate home after a delay so they see the success message
+        setTimeout(() => router.push("/dashboard"), 5000);
+      } else {
+        alert("Submission failed. Please check your data.");
       }
     } catch (error) {
-      alert("Network error. Please try again.");
+      console.error(error);
+      alert("An error occurred during submission.");
     } finally {
       setLoading(false);
     }
@@ -152,9 +163,12 @@ function ReportFoundForm() {
         </h2>
         <p className="text-slate-500 font-bold mt-4 leading-relaxed max-w-xs">
           {matchFound 
-            ? "The owner has been notified and a secure chat has been opened." 
-            : "Thank you! We will notify you as soon as the owner reports this ID lost."}
+            ? "We found the owner! They have been notified and can now contact you safely." 
+            : "Thank you for your honesty! We will notify you as soon as someone reports this ID lost."}
         </p>
+        <Link href="/dashboard" className="mt-8 text-blue-600 font-black uppercase text-sm border-b-2 border-blue-600">
+            Back to Dashboard
+        </Link>
       </div>
     );
   }
@@ -174,7 +188,7 @@ function ReportFoundForm() {
         <div className="bg-blue-50 border border-blue-100 p-4 rounded-3xl flex items-center gap-4">
            <ShieldCheck className="w-8 h-8 text-blue-600 shrink-0" />
            <p className="text-[10px] text-blue-700 font-bold leading-tight">
-             Secure reporting active. Privacy is protected until verification.
+             Secure reporting active. Privacy is protected until owner verification.
            </p>
         </div>
 
@@ -215,7 +229,7 @@ function ReportFoundForm() {
 
             <div className="relative">
               <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input placeholder="ID Number" className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700"
+              <input placeholder="ID Number (Optional)" className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700"
                 value={idNumber} onChange={(e) => setIdNumber(e.target.value)} />
             </div>
 
@@ -249,7 +263,7 @@ function ReportFoundForm() {
                 <option value="">Region...</option>
                 {CAMEROON_REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
-              <input placeholder="Spot Found" required className="p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 outline-none"
+              <input placeholder="Spot Found (e.g. Taxi)" required className="p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 outline-none"
                 value={locationDetail} onChange={(e) => setLocationDetail(e.target.value)} />
             </div>
         </div>
