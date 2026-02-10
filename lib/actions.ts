@@ -8,11 +8,11 @@ import { pusherServer } from "./pusher";
 import { v4 as uuidv4 } from "uuid";
 
 /**
- * 1. QR VAULT & SECURITY
+ * 1. QR VAULT & SECURITY LAYER
  */
 export async function getVaultBySlug(slug: string) {
   try {
-    const vault = await prisma.userVault.findUnique({
+    return await prisma.userVault.findUnique({
       where: { qrSlug: slug },
       select: {
         id: true,
@@ -20,7 +20,6 @@ export async function getVaultBySlug(slug: string) {
         createdAt: true,
       }
     });
-    return vault;
   } catch (error) {
     console.error("Database error fetching public vault:", error);
     return null;
@@ -71,6 +70,7 @@ export async function createLostReport(formData: {
     const { userId } = await auth();
     if (!userId) throw new Error("Unauthorized");
 
+    // Check for existing found items that match this new lost report
     const matches = await checkMatches({
       idType: formData.idType,
       fullName: formData.fullName,
@@ -100,12 +100,13 @@ export async function createLostReport(formData: {
       },
     });
 
+    // If matches found, notify the person who just reported it lost
     if (matches && matches.length > 0) {
       const notification = await prisma.notification.create({
         data: {
           userId,
           title: "Instant Match Found!",
-          message: `We found ${matches.length} matching found items for your ${formData.idType}!`,
+          message: `We found ${matches.length} matching item(s) already in our registry!`,
           type: "MATCH",
           metadata: { 
             reportId: matches[0].id,
@@ -162,8 +163,11 @@ export async function reportFoundId(formData: {
       },
     });
 
-    // 1. QR Scan Logic
+    let matchCreated = false;
+
+    // 1. DIRECT QR SCAN LOGIC (High Priority)
     if (formData.targetOwnerId) {
+      matchCreated = true;
       const notification = await prisma.notification.create({
         data: {
           userId: formData.targetOwnerId,
@@ -186,7 +190,7 @@ export async function reportFoundId(formData: {
       await pusherServer.trigger(`user-alerts-${formData.targetOwnerId}`, "new-notification", notification);
     }
 
-    // 2. Global Matching
+    // 2. GLOBAL SYSTEM MATCHING (Fuzzy Search)
     const matches = await checkMatches({
       idType: formData.idType,
       fullName: formData.fullName,
@@ -198,6 +202,7 @@ export async function reportFoundId(formData: {
     });
 
     if (matches.length > 0) {
+      matchCreated = true;
       await Promise.all(
         matches.map(async (match) => {
           await prisma.lostID.update({
@@ -205,6 +210,7 @@ export async function reportFoundId(formData: {
             data: { status: "MATCHED" }
           });
 
+          // Skip if we already notified via QR
           if (match.userId === formData.targetOwnerId) return;
 
           const notification = await prisma.notification.create({
@@ -227,7 +233,7 @@ export async function reportFoundId(formData: {
     revalidatePath("/dashboard");
     revalidatePath("/my-reports");
     revalidatePath("/notifications");
-    return { success: true, matchCount: matches.length };
+    return { success: true, matchCreated, matchCount: matches.length };
   } catch (error) {
     console.error("Found ID Error:", error);
     return { success: false };
@@ -235,37 +241,8 @@ export async function reportFoundId(formData: {
 }
 
 /**
- * 3. NOTIFICATIONS & UTILS
+ * 3. CHAT SYSTEM
  */
-export async function getNotifications() {
-  const { userId } = await auth();
-  if (!userId) return [];
-  return await prisma.notification.findMany({
-    where: { userId },
-    orderBy: { createdAt: 'desc' },
-  });
-}
-
-export async function markNotificationsAsRead() {
-  const { userId } = await auth();
-  if (!userId) return;
-  await prisma.notification.updateMany({
-    where: { userId, isRead: false },
-    data: { isRead: true },
-  });
-  revalidatePath("/dashboard");
-  revalidatePath("/notifications");
-}
-
-export async function clearAllNotifications() {
-  const { userId } = await auth();
-  if (!userId) return { success: false };
-  await prisma.notification.deleteMany({ where: { userId } });
-  revalidatePath("/notifications");
-  return { success: true };
-}
-
-// ... rest of your chat and search functions remain the same
 export async function startChat(reportId: string, targetUserId: string) {
   try {
     const { userId: currentUserId } = await auth();
@@ -340,10 +317,43 @@ export async function getChatMessages(chatId: string) {
   });
 }
 
+/**
+ * 4. NOTIFICATIONS & UTILS
+ */
+export async function getNotifications() {
+  const { userId } = await auth();
+  if (!userId) return [];
+  return await prisma.notification.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+export async function markNotificationsAsRead() {
+  const { userId } = await auth();
+  if (!userId) return;
+  await prisma.notification.updateMany({
+    where: { userId, isRead: false },
+    data: { isRead: true },
+  });
+  revalidatePath("/dashboard");
+  revalidatePath("/notifications");
+}
+
+export async function clearAllNotifications() {
+  const { userId } = await auth();
+  if (!userId) return { success: false };
+  await prisma.notification.deleteMany({ where: { userId } });
+  revalidatePath("/notifications");
+  return { success: true };
+}
+
+/**
+ * 5. SEARCH & DATA RETRIEVAL
+ */
 export async function getReportById(id: string) {
   try {
     let report = await prisma.lostID.findUnique({ where: { id } });
-    
     if (!report) {
       const foundReport = await prisma.foundID.findUnique({ where: { id } });
       if (foundReport) {

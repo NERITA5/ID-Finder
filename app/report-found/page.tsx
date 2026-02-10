@@ -13,12 +13,13 @@ import {
   Sparkles,
   ShieldCheck,
   Calendar,
-  MapPinned
+  MapPinned,
+  BellRing
 } from "lucide-react";
 import Link from "next/link";
 import { createWorker } from "tesseract.js";
 import { reportFoundId } from "@/lib/actions";
-import { useUser } from "@clerk/nextjs"; // Added Clerk hook
+import { useUser } from "@clerk/nextjs";
 
 const ID_TYPES = ["National ID", "Passport", "Driver's License", "Student ID", "Voter's Card", "Other"];
 const CAMEROON_REGIONS = ["Adamawa", "Central", "East", "Far North", "Littoral", "North", "Northwest", "South", "Southwest", "West"];
@@ -32,19 +33,18 @@ export default function ReportFoundIDPage() {
 }
 
 function ReportFoundForm() {
-  const { user } = useUser(); // Initialize Clerk User
+  const { user } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
   
   const ownerId = searchParams.get("owner");
-  const isFromQR = searchParams.get("from") === "qr";
   const vaultSlug = searchParams.get("vaultSlug");
 
   const [loading, setLoading] = useState(false);
   const [isScanningOCR, setIsScanningOCR] = useState(false); 
   const [submitted, setSubmitted] = useState(false);
+  const [matchFound, setMatchFound] = useState(false);
   
-  // Form Fields
   const [idType, setIdType] = useState("");
   const [fullName, setFullName] = useState(""); 
   const [idNumber, setIdNumber] = useState(""); 
@@ -54,7 +54,6 @@ function ReportFoundForm() {
   const [region, setRegion] = useState("");
   const [locationDetail, setLocationDetail] = useState("");
   
-  // Images
   const [imageFront, setImageFront] = useState<File | null>(null);
   const [previewFront, setPreviewFront] = useState<string | null>(null);
   const [imageBack, setImageBack] = useState<File | null>(null);
@@ -78,7 +77,7 @@ function ReportFoundForm() {
       const nameGuess = lines.find(line => /^[A-Z\s\-]{10,}$/.test(line));
       if (nameGuess && !fullName) setFullName(nameGuess);
     } catch (error) {
-      console.log("OCR failed - manual entry allowed");
+      console.log("OCR failure - fallback to manual");
     } finally {
       if (worker) await worker.terminate();
       setIsScanningOCR(false);
@@ -91,14 +90,6 @@ function ReportFoundForm() {
       setImageFront(file);
       setPreviewFront(URL.createObjectURL(file));
       performOCR(file); 
-    }
-  };
-
-  const handleBackImage = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setImageBack(file);
-      setPreviewBack(URL.createObjectURL(file));
     }
   };
 
@@ -133,18 +124,18 @@ function ReportFoundForm() {
         backImageUrl: backUrl,
         region,
         locationDetail,
-        // Correctly handling the reporterName from Clerk or fallback
         reporterName: user?.fullName || "Anonymous Finder", 
         targetOwnerId: ownerId || undefined,
         vaultSlug: vaultSlug || undefined,
       });
 
       if (result.success) {
+        if (result.matchCreated) setMatchFound(true);
         setSubmitted(true);
-        setTimeout(() => router.push("/"), 3000);
+        setTimeout(() => router.push("/"), 5000);
       }
     } catch (error) {
-      alert("Submission failed. Check your connection.");
+      alert("Network error. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -152,13 +143,17 @@ function ReportFoundForm() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 text-center animate-in zoom-in duration-300">
-        <div className="bg-green-100 p-8 rounded-[3rem] mb-6 animate-bounce">
-          <CheckCircle2 className="w-20 h-20 text-green-600" />
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-500">
+        <div className={`p-8 rounded-[3rem] mb-6 animate-bounce ${matchFound ? 'bg-blue-100' : 'bg-green-100'}`}>
+          {matchFound ? <BellRing className="w-20 h-20 text-blue-600" /> : <CheckCircle2 className="w-20 h-20 text-green-600" />}
         </div>
-        <h2 className="text-3xl font-black text-slate-800 uppercase italic">Owner Notified!</h2>
-        <p className="text-slate-500 font-bold mt-4 leading-relaxed">
-          Thank you! The registry is processing your report.
+        <h2 className="text-3xl font-black text-slate-800 uppercase italic">
+          {matchFound ? "Instant Match!" : "Report Filed"}
+        </h2>
+        <p className="text-slate-500 font-bold mt-4 leading-relaxed max-w-xs">
+          {matchFound 
+            ? "The owner has been notified and a secure chat has been opened." 
+            : "Thank you! We will notify you as soon as the owner reports this ID lost."}
         </p>
       </div>
     );
@@ -166,7 +161,6 @@ function ReportFoundForm() {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-12 antialiased">
-      {/* HEADER */}
       <div className="bg-[#0056d2] p-6 text-white flex items-center justify-between shadow-lg sticky top-0 z-50">
         <div className="flex items-center gap-4">
             <Link href="/" className="p-2 bg-white/10 rounded-2xl">
@@ -177,23 +171,20 @@ function ReportFoundForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="p-6 space-y-6 max-w-lg mx-auto">
-        
-        {/* SAFETY SHIELD NOTICE */}
         <div className="bg-blue-50 border border-blue-100 p-4 rounded-3xl flex items-center gap-4">
            <ShieldCheck className="w-8 h-8 text-blue-600 shrink-0" />
            <p className="text-[10px] text-blue-700 font-bold leading-tight">
-             Secure reporting active. Your details are only shared with the owner once a match is verified.
+             Secure reporting active. Privacy is protected until verification.
            </p>
         </div>
 
-        {/* PHOTO UPLOADS */}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Front Side *</label>
             <div onClick={() => document.getElementById('front-upload')?.click()} 
-                 className="relative h-40 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center bg-white overflow-hidden shadow-sm active:scale-95 transition-transform">
+                 className="relative h-40 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center bg-white overflow-hidden shadow-sm active:scale-95 transition-all">
               {isScanningOCR && <div className="absolute inset-0 bg-blue-600/20 backdrop-blur-sm z-10 flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>}
-              {previewFront ? <img src={previewFront} className="w-full h-full object-cover" /> : <Camera className="w-8 h-8 text-blue-400" />}
+              {previewFront ? <img src={previewFront} className="w-full h-full object-cover" alt="Front preview" /> : <Camera className="w-8 h-8 text-blue-400" />}
               <input id="front-upload" type="file" accept="image/*" className="hidden" onChange={handleFrontImage} required />
             </div>
           </div>
@@ -201,40 +192,42 @@ function ReportFoundForm() {
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Back Side</label>
             <div onClick={() => document.getElementById('back-upload')?.click()} 
-                 className="relative h-40 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center bg-white overflow-hidden shadow-sm active:scale-95 transition-transform">
-              {previewBack ? <img src={previewBack} className="w-full h-full object-cover" /> : <Camera className="w-8 h-8 text-slate-300" />}
-              <input id="back-upload" type="file" accept="image/*" className="hidden" onChange={handleBackImage} />
+                 className="relative h-40 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center bg-white overflow-hidden shadow-sm active:scale-95 transition-all">
+              {previewBack ? <img src={previewBack} className="w-full h-full object-cover" alt="Back preview" /> : <Camera className="w-8 h-8 text-slate-300" />}
+              <input id="back-upload" type="file" accept="image/*" className="hidden" onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) { setImageBack(file); setPreviewBack(URL.createObjectURL(file)); }
+              }} />
             </div>
           </div>
         </div>
 
-        {/* IDENTITY DETAILS */}
         <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-4">
             <label className="text-[11px] font-black text-blue-600 uppercase tracking-widest ml-1 flex items-center gap-2">
-               <Sparkles className="w-4 h-4" /> Personal Details
+               <Sparkles className="w-4 h-4" /> Identity Details
             </label>
             
             <div className="relative">
               <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input placeholder="Full Name on ID" required className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700 placeholder:text-slate-300"
+              <input placeholder="Full Name on ID" required className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700"
                 value={fullName} onChange={(e) => setFullName(e.target.value)} />
             </div>
 
             <div className="relative">
               <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input placeholder="ID Number (Optional)" className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700 placeholder:text-slate-300"
+              <input placeholder="ID Number" className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700"
                 value={idNumber} onChange={(e) => setIdNumber(e.target.value)} />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
                <div className="relative">
                   <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input type="text" placeholder="DOB (YYYY-MM-DD)" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs text-slate-700 placeholder:text-slate-300"
+                  <input type="text" placeholder="DOB (YYYY-MM-DD)" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs"
                     value={dob} onChange={(e) => setDob(e.target.value)} />
                </div>
                <div className="relative">
                   <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input type="text" placeholder="Issue Date" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs text-slate-700 placeholder:text-slate-300"
+                  <input type="text" placeholder="Issue Date" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs"
                     value={doi} onChange={(e) => setDoi(e.target.value)} />
                </div>
             </div>
@@ -246,10 +239,9 @@ function ReportFoundForm() {
             </select>
         </div>
 
-        {/* LOCATION INFO */}
         <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-4">
             <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-              <MapPin className="w-4 h-4" /> Discovery Location
+              <MapPin className="w-4 h-4" /> Found Location
             </label>
             <div className="grid grid-cols-2 gap-3">
               <select required value={region} onChange={(e) => setRegion(e.target.value)}
@@ -266,7 +258,7 @@ function ReportFoundForm() {
           className={`w-full py-6 rounded-3xl font-black shadow-xl transition-all flex justify-center items-center gap-3 text-lg uppercase tracking-widest active:scale-95 ${
             isFormValid ? 'bg-[#0056d2] text-white' : 'bg-slate-200 text-slate-400'
           }`}>
-          {loading ? <Loader2 className="animate-spin w-7 h-7" /> : "SUBMIT VERIFIED REPORT"}
+          {loading ? <Loader2 className="animate-spin w-7 h-7" /> : "SUBMIT REPORT"}
         </button>
       </form>
     </div>
