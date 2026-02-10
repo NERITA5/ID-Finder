@@ -1,6 +1,19 @@
 "use client";
 import React, { useState } from "react";
-import { Camera, MapPin, Calendar, CreditCard, Loader2, ChevronLeft, CheckCircle, Hash, Info, Baby, CalendarDays } from "lucide-react";
+import { 
+  Camera, 
+  MapPin, 
+  Calendar, 
+  CreditCard, 
+  Loader2, 
+  ChevronLeft, 
+  CheckCircle, 
+  Hash, 
+  Info, 
+  Baby, 
+  CalendarDays,
+  ShieldAlert
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Script from "next/script";
@@ -15,8 +28,9 @@ export default function ReportLostPage() {
     idType: "National ID",
     fullName: "",
     idNumber: "", 
-    placeOfBirth: "", // NEW: Critical matching field
-    dateOfIssue: "",  // NEW: Critical matching field
+    dateOfBirth: "",   // CRITICAL for matching
+    placeOfBirth: "",  // CRITICAL for matching
+    dateOfIssue: "",   // CRITICAL for matching
     lastLocation: "",
     dateLost: "",
     description: "",
@@ -83,31 +97,36 @@ export default function ReportLostPage() {
   };
 
   return (
-    <div className="max-w-md mx-auto bg-slate-50 min-h-screen pb-10 font-sans">
+    <div className="max-w-md mx-auto bg-slate-50 min-h-screen pb-10 font-sans antialiased">
       <Script 
         src="https://upload-widget.cloudinary.com/global/all.js" 
         strategy="afterInteractive" 
         onLoad={() => setScriptLoaded(true)}
       />
       
-      <div className="bg-[#0056d2] p-6 pt-12 text-white rounded-b-[2.5rem] relative shadow-xl">
-        <Link href="/dashboard" className="absolute top-12 left-6 bg-white/20 p-2 rounded-full hover:bg-white/30 transition-all">
+      {/* Header Section */}
+      <div className="bg-[#0056d2] p-6 pt-12 text-white rounded-b-[3.5rem] relative shadow-2xl overflow-hidden">
+        <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
+        <Link href="/dashboard" className="absolute top-12 left-6 bg-white/20 p-2 rounded-full hover:bg-white/30 transition-all z-10">
           <ChevronLeft className="w-5 h-5" />
         </Link>
-        <div className="text-center mt-4">
+        <div className="text-center mt-4 relative z-10">
+          <ShieldAlert className="w-10 h-10 mx-auto mb-2 text-blue-200" />
           <h1 className="text-2xl font-black italic uppercase tracking-tighter">Report Lost ID</h1>
-          <p className="text-blue-100 text-sm font-medium mt-1 uppercase tracking-widest text-[10px]">Registry Portal</p>
+          <p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.3em] opacity-70">Secured Registry Entry</p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="px-6 space-y-4 -translate-y-6">
-        <div className="bg-white p-6 rounded-[2.5rem] shadow-sm space-y-4 border border-slate-100">
+      <form onSubmit={handleSubmit} className="px-6 space-y-4 -translate-y-8">
+        
+        {/* Core Identity Card */}
+        <div className="bg-white p-6 rounded-[2.5rem] shadow-xl space-y-4 border border-slate-100">
+          <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest ml-1">Document Identity</label>
           
-          {/* ID Category Selection */}
-          <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ID Category</label>
+          <div className="relative">
+            <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
             <select 
-              className="w-full mt-1 p-4 bg-slate-50 rounded-2xl border-none outline-none font-bold text-slate-700 appearance-none cursor-pointer"
+              className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl border-none outline-none font-bold text-slate-700 appearance-none cursor-pointer"
               value={formData.idType}
               onChange={(e) => setFormData({...formData, idType: e.target.value})}
             >
@@ -119,53 +138,67 @@ export default function ReportLostPage() {
             </select>
           </div>
 
-          {/* Full Name */}
           <div className="relative">
             <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500 w-5 h-5" />
             <input 
-              placeholder="Full Name on ID" required
-              className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-800 placeholder:text-slate-400"
+              placeholder="Full Name as written on ID" required
+              className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-800 placeholder:text-slate-300"
               onChange={(e) => setFormData({...formData, fullName: e.target.value})}
             />
           </div>
 
-          {/* ID Number */}
-          <div className="space-y-1">
-            <div className="relative">
-              <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-              <input 
-                placeholder="ID Number (Recommended)"
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-800 placeholder:text-slate-400 border-2 border-transparent focus:border-blue-100 transition-all"
-                onChange={(e) => setFormData({...formData, idNumber: e.target.value})}
-              />
-            </div>
+          <div className="relative">
+            <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+            <input 
+              placeholder="ID Number"
+              className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-800 placeholder:text-slate-300 border-2 border-transparent focus:border-blue-100 transition-all"
+              onChange={(e) => setFormData({...formData, idNumber: e.target.value})}
+            />
           </div>
+        </div>
 
-          {/* NEW: Place of Birth & Date of Issue */}
-          <div className="grid grid-cols-1 gap-4 pt-2 border-t border-slate-50">
+        {/* Verification Details Card */}
+        <div className="bg-white p-6 rounded-[2.5rem] shadow-xl space-y-4 border border-slate-100">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-center block">Verification Credentials</label>
+          
+          <div className="grid grid-cols-1 gap-4">
             <div className="relative">
-              <Baby className="absolute left-4 top-1/2 -translate-y-1/2 text-pink-500 w-5 h-5" />
+              <Baby className="absolute left-4 top-1/2 -translate-y-1/2 text-pink-400 w-5 h-5" />
               <input 
                 placeholder="Place of Birth"
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-800 placeholder:text-slate-400"
+                className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-800 placeholder:text-slate-300"
                 onChange={(e) => setFormData({...formData, placeOfBirth: e.target.value})}
               />
             </div>
-            <div className="relative">
-              <CalendarDays className="absolute left-4 top-1/2 -translate-y-1/2 text-green-500 w-5 h-5" />
-              <input 
-                placeholder="Date of Issue (DD/MM/YYYY)"
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-800 placeholder:text-slate-400"
-                onChange={(e) => setFormData({...formData, dateOfIssue: e.target.value})}
-              />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="relative">
+                <CalendarDays className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-400 w-4 h-4" />
+                <input 
+                  placeholder="DOB (YYYY-MM-DD)"
+                  className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-[11px] text-slate-800 placeholder:text-slate-300"
+                  onChange={(e) => setFormData({...formData, dateOfBirth: e.target.value})}
+                />
+              </div>
+              <div className="relative">
+                <CalendarDays className="absolute left-4 top-1/2 -translate-y-1/2 text-green-400 w-4 h-4" />
+                <input 
+                  placeholder="Date of Issue"
+                  className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-[11px] text-slate-800 placeholder:text-slate-300"
+                  onChange={(e) => setFormData({...formData, dateOfIssue: e.target.value})}
+                />
+              </div>
             </div>
           </div>
+        </div>
 
+        {/* Incident Details Card */}
+        <div className="bg-white p-6 rounded-[2.5rem] shadow-xl space-y-4 border border-slate-100">
           <div className="relative">
             <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-red-500 w-5 h-5" />
             <input 
               placeholder="Last Known Location" required
-              className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-800 placeholder:text-slate-400"
+              className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-800 placeholder:text-slate-300"
               onChange={(e) => setFormData({...formData, lastLocation: e.target.value})}
             />
           </div>
@@ -174,48 +207,50 @@ export default function ReportLostPage() {
             <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500 w-5 h-5" />
             <input 
               type="date" required
-              className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-500"
+              className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-500 uppercase text-xs"
               onChange={(e) => setFormData({...formData, dateLost: e.target.value})}
             />
           </div>
         </div>
 
-        {/* Photo Button */}
+        {/* Reference Image Button */}
         <button 
           type="button" 
           onClick={uploadImage}
-          className={`w-full border-2 border-dashed p-8 rounded-[2.5rem] flex flex-col items-center gap-2 transition-all ${
+          className={`w-full border-4 border-dashed p-8 rounded-[2.5rem] flex flex-col items-center gap-2 transition-all ${
             imageLoaded 
               ? 'border-green-500 bg-green-50 text-green-600' 
-              : 'border-slate-200 bg-white text-slate-400 hover:border-[#0056d2] hover:bg-blue-50'
+              : 'border-slate-100 bg-white text-slate-400 hover:border-blue-200 hover:bg-blue-50 shadow-sm'
           }`}
         >
           {imageLoaded ? (
             <>
-              <CheckCircle className="w-8 h-8" />
-              <span className="text-[10px] font-black uppercase">Reference Photo Attached</span>
+              <CheckCircle className="w-8 h-8 animate-in zoom-in" />
+              <span className="text-[10px] font-black uppercase italic">Reference Photo Stored</span>
             </>
           ) : (
             <>
               <Camera className={`w-8 h-8 ${!scriptLoaded ? 'animate-pulse' : ''}`} />
-              <span className="text-[10px] font-black uppercase">
-                {scriptLoaded ? "Attach Photo for visual match (Optional)" : "Loading..."}
-              </span>
+              <div className="text-center">
+                <span className="text-[10px] font-black uppercase block">Reference Photo</span>
+                <span className="text-[8px] font-bold text-slate-300 uppercase">Helps verify ownership visually</span>
+              </div>
             </>
           )}
         </button>
 
+        {/* Submit Button */}
         <button 
           type="submit" disabled={loading}
-          className="w-full bg-[#0056d2] hover:bg-blue-800 text-white font-black py-6 rounded-[2rem] shadow-xl active:scale-95 transition-all flex justify-center items-center text-lg uppercase italic tracking-tighter"
+          className="w-full bg-[#0056d2] hover:bg-blue-800 text-white font-black py-6 rounded-3xl shadow-2xl active:scale-95 transition-all flex justify-center items-center text-lg uppercase italic tracking-tighter border-b-4 border-blue-900"
         >
           {loading ? <Loader2 className="animate-spin w-6 h-6" /> : "BROADCAST LOSS"}
         </button>
 
-        <div className="flex items-center gap-2 px-4 text-slate-400">
-           <Info className="w-4 h-4" />
-           <p className="text-[9px] font-bold uppercase leading-tight tracking-tight">
-             Detailed info like Place of Birth increases matching speed by 80%.
+        <div className="flex items-center gap-3 px-6 py-4 bg-blue-50/50 rounded-3xl border border-blue-100">
+           <Info className="w-5 h-5 text-blue-400 shrink-0" />
+           <p className="text-[9px] font-black text-blue-900/60 uppercase leading-tight">
+             Detailed credentials like <span className="text-blue-600">Place of Birth</span> allow our AI to match your ID with 99% accuracy.
            </p>
         </div>
       </form>

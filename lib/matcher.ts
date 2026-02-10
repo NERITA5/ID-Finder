@@ -5,23 +5,21 @@ export async function checkMatches(newItem: {
   fullName: string;
   status: "LOST" | "FOUND";
   idNumber?: string;
+  dateOfBirth?: string;
+  dateOfIssue?: string;
   placeOfBirth?: string;
 }) {
   try {
     const isLostReport = newItem.status === "LOST";
-    
-    // Standardize the search term (e.g., "National ID Card" becomes "National")
-    // This allows "National ID" and "National ID Card" to find each other.
+    // Fuzzy type matching (e.g., "National" matches "National ID" or "National Card")
     const baseType = newItem.idType.split(" ")[0]; 
 
-    console.log(`[DEBUG] Searching for ${newItem.status} match. Type: ${newItem.idType}, Num: ${newItem.idNumber}`);
-
-    // 1. FETCH CANDIDATES (The "Fuzzy" Fetch)
+    // 1. FETCH CANDIDATES
     const candidates = isLostReport
       ? await prisma.foundID.findMany({
           where: {
             idType: { contains: baseType, mode: 'insensitive' },
-            status: { in: ["AVAILABLE", "FOUND"] } // Checks both just in case
+            status: { in: ["AVAILABLE"] }
           },
         })
       : await prisma.lostID.findMany({
@@ -31,55 +29,61 @@ export async function checkMatches(newItem: {
           },
         });
 
-    console.log(`[DEBUG] DB returned ${candidates.length} potential candidates.`);
-
     const scoredMatches = candidates.map((candidate: any) => {
       let score = 0;
 
-      // --- ID NUMBER (70 Points) ---
-      // We remove ALL non-alphanumeric characters (dashes, spaces, etc)
+      // --- 1. ID NUMBER (50 Points) ---
+      // Strip spaces/dashes. OCR often fails here, so manual entry is king.
       if (newItem.idNumber && candidate.idNumber) {
         const cleanNew = newItem.idNumber.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
         const cleanCand = candidate.idNumber.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-        
-        if (cleanNew === cleanCand) {
-          score += 70;
-        }
+        if (cleanNew === cleanCand) score += 50;
       }
 
-      // --- FULL NAME (Max 25 Points) ---
-      const inputName = newItem.fullName.toLowerCase().trim();
-      const candName = candidate.fullName.toLowerCase().trim();
+      // --- 2. FULL NAME (25 Points) ---
+      // Case-insensitive & trimmed
+      const name1 = newItem.fullName.toLowerCase().trim();
+      const name2 = candidate.fullName.toLowerCase().trim();
       
-      if (inputName === candName) {
+      if (name1 === name2) {
         score += 25; 
       } else {
-        const inputParts = inputName.split(/\s+/).filter(p => p.length > 1);
-        const candParts = candName.split(/\s+/).filter(p => p.length > 1);
-        const commonParts = inputParts.filter(part => candParts.includes(part));
-        
-        if (commonParts.length >= 2) {
-          score += 20; 
-        } else if (candName.includes(inputName) || inputName.includes(candName)) {
+        const parts1 = name1.split(/\s+/).filter(p => p.length > 1);
+        const parts2 = name2.split(/\s+/).filter(p => p.length > 1);
+        const common = parts1.filter(p => parts2.includes(p));
+        if (common.length >= 2) score += 20; 
+      }
+
+      // --- 3. DATE OF BIRTH (15 Points) ---
+      if (newItem.dateOfBirth && candidate.dateOfBirth) {
+        if (newItem.dateOfBirth.trim() === candidate.dateOfBirth.trim()) {
           score += 15;
         }
       }
 
-      // --- PLACE OF BIRTH (10 Points) ---
+      // --- 4. DATE OF ISSUE (10 Points) ---
+      if (newItem.dateOfIssue && candidate.dateOfIssue) {
+        if (newItem.dateOfIssue.trim() === candidate.dateOfIssue.trim()) {
+          score += 10;
+        }
+      }
+
+      // --- 5. PLACE OF BIRTH (5 Points) ---
       if (newItem.placeOfBirth && candidate.placeOfBirth) {
         if (newItem.placeOfBirth.toLowerCase().trim() === candidate.placeOfBirth.toLowerCase().trim()) {
-          score += 10;
+          score += 5;
         }
       }
 
       return { ...candidate, matchScore: score };
     });
 
+    // THRESHOLD: 60 Points
+    // Requires (ID Number + Name) OR (Name + DOB + DOI + POB)
     const finalResults = scoredMatches
-      .filter((match) => match.matchScore >= 30)
+      .filter((match) => match.matchScore >= 60)
       .sort((a, b) => b.matchScore - a.matchScore);
 
-    console.log(`[DEBUG] Final matches after scoring: ${finalResults.length}`);
     return finalResults;
 
   } catch (error) {

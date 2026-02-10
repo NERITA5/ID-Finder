@@ -5,18 +5,20 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { 
   Camera, 
   MapPin, 
-  FileText, 
   ChevronLeft, 
   Loader2, 
   CheckCircle2,
   CreditCard,
   Hash,
   Sparkles,
-  ShieldCheck
+  ShieldCheck,
+  Calendar,
+  MapPinned
 } from "lucide-react";
 import Link from "next/link";
 import { createWorker } from "tesseract.js";
 import { reportFoundId } from "@/lib/actions";
+import { useUser } from "@clerk/nextjs"; // Added Clerk hook
 
 const ID_TYPES = ["National ID", "Passport", "Driver's License", "Student ID", "Voter's Card", "Other"];
 const CAMEROON_REGIONS = ["Adamawa", "Central", "East", "Far North", "Littoral", "North", "Northwest", "South", "Southwest", "West"];
@@ -30,6 +32,7 @@ export default function ReportFoundIDPage() {
 }
 
 function ReportFoundForm() {
+  const { user } = useUser(); // Initialize Clerk User
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -41,79 +44,74 @@ function ReportFoundForm() {
   const [isScanningOCR, setIsScanningOCR] = useState(false); 
   const [submitted, setSubmitted] = useState(false);
   
+  // Form Fields
   const [idType, setIdType] = useState("");
   const [fullName, setFullName] = useState(""); 
   const [idNumber, setIdNumber] = useState(""); 
+  const [dob, setDob] = useState("");
+  const [doi, setDoi] = useState("");
+  const [pob, setPob] = useState("");
   const [region, setRegion] = useState("");
   const [locationDetail, setLocationDetail] = useState("");
-  const [image, setImage] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  
+  // Images
+  const [imageFront, setImageFront] = useState<File | null>(null);
+  const [previewFront, setPreviewFront] = useState<string | null>(null);
+  const [imageBack, setImageBack] = useState<File | null>(null);
+  const [previewBack, setPreviewBack] = useState<string | null>(null);
 
-  const isFormValid = image && idType && region && locationDetail && fullName;
-
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setImage(file);
-      setPreview(URL.createObjectURL(file));
-      await performOCR(file); 
-    }
-  };
+  const isFormValid = imageFront && idType && region && locationDetail && fullName;
 
   const performOCR = async (file: File) => {
     setIsScanningOCR(true);
     let worker;
     try {
-      // Initialize worker with faster CDN data
       worker = await createWorker('eng', 1, {
         cachePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-data@4.0.0/'
       });
-
       const { data: { text } } = await worker.recognize(file);
       
-      // 1. Passport Detection (MRZ Zone)
-      if (text.includes("P<")) {
-        setIdType("Passport");
-        const mrzLine = text.split('\n').find(l => l.startsWith('P<'));
-        if (mrzLine) {
-          const nameMatch = mrzLine.substring(5).split('<<')[0].replace(/</g, ' ');
-          setFullName(nameMatch);
-        }
-      }
-
-      // 2. ID Number Extraction (Look for 8+ consecutive digits)
       const idMatch = text.match(/\d{8,}/); 
       if (idMatch && !idNumber) setIdNumber(idMatch[0]);
 
-      // 3. Name Extraction (Look for high-confidence uppercase lines)
       const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
       const nameGuess = lines.find(line => /^[A-Z\s\-]{10,}$/.test(line));
       if (nameGuess && !fullName) setFullName(nameGuess);
-
     } catch (error) {
-      console.error("OCR Error:", error);
+      console.log("OCR failed - manual entry allowed");
     } finally {
       if (worker) await worker.terminate();
       setIsScanningOCR(false);
     }
   };
 
-  const uploadImageToCloudinary = async () => {
-    if (!image) return null;
-    const formData = new FormData();
-    formData.append("file", image);
-    formData.append("upload_preset", "id_registry_uploads");
-
-    try {
-      const response = await fetch(`https://api.cloudinary.com/v1_1/dkndxbeao/image/upload`, {
-          method: "POST",
-          body: formData,
-      });
-      const data = await response.json();
-      return data.secure_url; 
-    } catch (error) {
-      return null;
+  const handleFrontImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setImageFront(file);
+      setPreviewFront(URL.createObjectURL(file));
+      performOCR(file); 
     }
+  };
+
+  const handleBackImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setImageBack(file);
+      setPreviewBack(URL.createObjectURL(file));
+    }
+  };
+
+  const uploadToCloudinary = async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", "id_registry_uploads");
+    const res = await fetch(`https://api.cloudinary.com/v1_1/dkndxbeao/image/upload`, {
+        method: "POST",
+        body: formData,
+    });
+    const data = await res.json();
+    return data.secure_url;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -121,17 +119,24 @@ function ReportFoundForm() {
     setLoading(true);
 
     try {
-      const uploadedImageUrl = await uploadImageToCloudinary();
+      const frontUrl = await uploadToCloudinary(imageFront!);
+      const backUrl = imageBack ? await uploadToCloudinary(imageBack) : null;
+
       const result = await reportFoundId({
         idType,
         fullName,
         idNumber,
-        imageUrl: uploadedImageUrl || "",
+        dateOfBirth: dob,
+        dateOfIssue: doi,
+        placeOfBirth: pob,
+        imageUrl: frontUrl,
+        backImageUrl: backUrl,
         region,
         locationDetail,
+        // Correctly handling the reporterName from Clerk or fallback
+        reporterName: user?.fullName || "Anonymous Finder", 
         targetOwnerId: ownerId || undefined,
         vaultSlug: vaultSlug || undefined,
-        reporterName: "Good Samaritan",
       });
 
       if (result.success) {
@@ -139,7 +144,7 @@ function ReportFoundForm() {
         setTimeout(() => router.push("/"), 3000);
       }
     } catch (error) {
-      alert("Submission Error. Please try again.");
+      alert("Submission failed. Check your connection.");
     } finally {
       setLoading(false);
     }
@@ -147,106 +152,121 @@ function ReportFoundForm() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-700">
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 text-center animate-in zoom-in duration-300">
         <div className="bg-green-100 p-8 rounded-[3rem] mb-6 animate-bounce">
           <CheckCircle2 className="w-20 h-20 text-green-600" />
         </div>
-        <h2 className="text-3xl font-black text-slate-800 uppercase italic tracking-tighter">
-          {isFromQR ? "Owner Notified!" : "Report Posted!"}
-        </h2>
-        <p className="text-slate-500 font-bold mt-4 tracking-tight leading-relaxed">
-          {isFromQR 
-            ? "A secure notification was sent to the owner's vault. Thank you for your kindness!" 
-            : "The system is now scanning for a match in our registry."}
+        <h2 className="text-3xl font-black text-slate-800 uppercase italic">Owner Notified!</h2>
+        <p className="text-slate-500 font-bold mt-4 leading-relaxed">
+          Thank you! The registry is processing your report.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-12 font-sans antialiased">
+    <div className="min-h-screen bg-slate-50 pb-12 antialiased">
+      {/* HEADER */}
       <div className="bg-[#0056d2] p-6 text-white flex items-center justify-between shadow-lg sticky top-0 z-50">
         <div className="flex items-center gap-4">
-            <Link href="/" className="p-2 bg-white/10 rounded-2xl active:scale-90 transition-transform">
+            <Link href="/" className="p-2 bg-white/10 rounded-2xl">
                 <ChevronLeft className="w-6 h-6" />
             </Link>
-            <h1 className="text-xl font-black italic tracking-tighter uppercase pt-1">Verify Found ID</h1>
+            <h1 className="text-xl font-black italic tracking-tighter uppercase">Report Found ID</h1>
         </div>
-        {isFromQR && (
-          <div className="flex items-center gap-2 bg-green-500/20 px-3 py-1 rounded-full border border-green-400/30">
-            <ShieldCheck className="w-4 h-4 text-green-300" />
-            <span className="text-[10px] font-black uppercase italic text-green-300">QR Active</span>
-          </div>
-        )}
       </div>
 
-      <form onSubmit={handleSubmit} className="p-6 space-y-5 max-w-lg mx-auto">
-        <div className="space-y-2">
-          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-2">1. Snap ID Photo</label>
-          <div 
-            onClick={() => document.getElementById('file-upload')?.click()}
-            className="relative h-64 border-4 border-dashed rounded-[3rem] flex flex-col items-center justify-center cursor-pointer overflow-hidden bg-white shadow-inner transition-all hover:border-blue-400"
-          >
-            {isScanningOCR && (
-              <div className="absolute inset-0 z-20 bg-blue-600/40 flex flex-col items-center justify-center backdrop-blur-md animate-in fade-in">
-                <div className="bg-white p-6 rounded-3xl shadow-2xl flex flex-col items-center border-2 border-blue-500">
-                    <Sparkles className="w-10 h-10 text-blue-600 animate-pulse mb-3" />
-                    <span className="text-[11px] font-black text-blue-600 uppercase italic tracking-tighter">AI Scanning...</span>
-                </div>
-              </div>
-            )}
-            {preview ? (
-              <img src={preview} alt="Preview" className="w-full h-full object-cover" />
-            ) : (
-              <div className="text-center p-6">
-                <Camera className="w-12 h-12 text-blue-400 mx-auto mb-2" />
-                <p className="text-xs font-bold text-slate-400">Clear photo of the front side</p>
-              </div>
-            )}
-            <input id="file-upload" type="file" accept="image/*" className="hidden" onChange={handleImageChange} required />
+      <form onSubmit={handleSubmit} className="p-6 space-y-6 max-w-lg mx-auto">
+        
+        {/* SAFETY SHIELD NOTICE */}
+        <div className="bg-blue-50 border border-blue-100 p-4 rounded-3xl flex items-center gap-4">
+           <ShieldCheck className="w-8 h-8 text-blue-600 shrink-0" />
+           <p className="text-[10px] text-blue-700 font-bold leading-tight">
+             Secure reporting active. Your details are only shared with the owner once a match is verified.
+           </p>
+        </div>
+
+        {/* PHOTO UPLOADS */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Front Side *</label>
+            <div onClick={() => document.getElementById('front-upload')?.click()} 
+                 className="relative h-40 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center bg-white overflow-hidden shadow-sm active:scale-95 transition-transform">
+              {isScanningOCR && <div className="absolute inset-0 bg-blue-600/20 backdrop-blur-sm z-10 flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>}
+              {previewFront ? <img src={previewFront} className="w-full h-full object-cover" /> : <Camera className="w-8 h-8 text-blue-400" />}
+              <input id="front-upload" type="file" accept="image/*" className="hidden" onChange={handleFrontImage} required />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Back Side</label>
+            <div onClick={() => document.getElementById('back-upload')?.click()} 
+                 className="relative h-40 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center bg-white overflow-hidden shadow-sm active:scale-95 transition-transform">
+              {previewBack ? <img src={previewBack} className="w-full h-full object-cover" /> : <Camera className="w-8 h-8 text-slate-300" />}
+              <input id="back-upload" type="file" accept="image/*" className="hidden" onChange={handleBackImage} />
+            </div>
           </div>
         </div>
 
+        {/* IDENTITY DETAILS */}
         <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-4">
-            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">2. ID Identity Details</label>
+            <label className="text-[11px] font-black text-blue-600 uppercase tracking-widest ml-1 flex items-center gap-2">
+               <Sparkles className="w-4 h-4" /> Personal Details
+            </label>
+            
             <div className="relative">
-              <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500" />
-              <input placeholder="Full Name on ID" required className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700"
+              <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input placeholder="Full Name on ID" required className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700 placeholder:text-slate-300"
                 value={fullName} onChange={(e) => setFullName(e.target.value)} />
             </div>
+
             <div className="relative">
               <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input placeholder="ID Number" className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700"
+              <input placeholder="ID Number (Optional)" className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700 placeholder:text-slate-300"
                 value={idNumber} onChange={(e) => setIdNumber(e.target.value)} />
             </div>
-            <div className="relative">
-              <FileText className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500" />
-              <select required value={idType} onChange={(e) => setIdType(e.target.value)}
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl font-bold text-slate-700 appearance-none outline-none">
-                <option value="">Document Category...</option>
-                {ID_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+
+            <div className="grid grid-cols-2 gap-3">
+               <div className="relative">
+                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input type="text" placeholder="DOB (YYYY-MM-DD)" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs text-slate-700 placeholder:text-slate-300"
+                    value={dob} onChange={(e) => setDob(e.target.value)} />
+               </div>
+               <div className="relative">
+                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input type="text" placeholder="Issue Date" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-xs text-slate-700 placeholder:text-slate-300"
+                    value={doi} onChange={(e) => setDoi(e.target.value)} />
+               </div>
             </div>
+
+            <select required value={idType} onChange={(e) => setIdType(e.target.value)}
+                className="w-full px-5 py-4 bg-slate-50 rounded-2xl font-bold text-slate-700 appearance-none outline-none border-none cursor-pointer">
+                <option value="">Document Type...</option>
+                {ID_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
         </div>
 
+        {/* LOCATION INFO */}
         <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-4">
-            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">3. Finding Location</label>
+            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+              <MapPin className="w-4 h-4" /> Discovery Location
+            </label>
             <div className="grid grid-cols-2 gap-3">
               <select required value={region} onChange={(e) => setRegion(e.target.value)}
-                className="p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 outline-none border-none">
+                className="p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 outline-none cursor-pointer">
                 <option value="">Region...</option>
                 {CAMEROON_REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
-              <input placeholder="Specific Spot" required className="p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 outline-none"
+              <input placeholder="Spot Found" required className="p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 outline-none"
                 value={locationDetail} onChange={(e) => setLocationDetail(e.target.value)} />
             </div>
         </div>
 
-        <button disabled={loading || !isFormValid || isScanningOCR} type="submit" 
-          className={`w-full py-6 rounded-[2.5rem] font-black shadow-xl transition-all flex justify-center items-center gap-3 text-lg uppercase tracking-widest border-4 border-white/20 active:scale-95 ${
-            isFormValid && !isScanningOCR ? 'bg-[#0056d2] text-white' : 'bg-slate-200 text-slate-400'
+        <button disabled={loading || !isFormValid} type="submit" 
+          className={`w-full py-6 rounded-3xl font-black shadow-xl transition-all flex justify-center items-center gap-3 text-lg uppercase tracking-widest active:scale-95 ${
+            isFormValid ? 'bg-[#0056d2] text-white' : 'bg-slate-200 text-slate-400'
           }`}>
-          {loading ? <Loader2 className="animate-spin w-7 h-7" /> : "POST FOUND REPORT"}
+          {loading ? <Loader2 className="animate-spin w-7 h-7" /> : "SUBMIT VERIFIED REPORT"}
         </button>
       </form>
     </div>

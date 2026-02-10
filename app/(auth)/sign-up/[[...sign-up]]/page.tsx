@@ -21,7 +21,7 @@ export default function SignUpPage() {
   const { isLoaded, signUp, setActive } = useSignUp();
   const [emailAddress, setEmailAddress] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [showPassword, setShowPassword] = React.useState(false); // New state for visibility
+  const [showPassword, setShowPassword] = React.useState(false); 
   const [firstName, setFirstName] = React.useState("");
   const [lastName, setLastName] = React.useState("");
   const [pendingVerification, setPendingVerification] = React.useState(false);
@@ -85,8 +85,8 @@ export default function SignUpPage() {
   };
 
   return (
-    <div className="min-h-screen flex justify-center bg-slate-100 font-sans antialiased">
-      <div className="w-full max-w-md bg-white shadow-2xl flex flex-col min-h-screen md:min-h-0 md:h-[850px] md:my-auto md:rounded-[2.5rem] overflow-hidden relative">
+    <div className="min-h-screen flex justify-center bg-slate-100 font-sans antialiased py-10">
+      <div className="w-full max-w-md bg-white shadow-2xl flex flex-col h-fit md:my-auto md:rounded-[2.5rem] overflow-hidden relative pb-10">
         
         {/* HEADER */}
         <div className="bg-[#0056d2] pt-8 pb-16 relative">
@@ -195,7 +195,8 @@ export default function SignUpPage() {
           )}
         </div>
 
-        <div className="mt-auto pb-8 text-center">
+        {/* ADJUSTED FOOTER LINK */}
+        <div className="mt-10 text-center">
           <p className="text-[11px] text-slate-400 font-black tracking-widest uppercase">
             Already have an account? <Link href="/sign-in" className="text-blue-600 ml-1 underline underline-offset-4">Sign In</Link>
           </p>

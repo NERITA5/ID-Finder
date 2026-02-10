@@ -36,7 +36,7 @@ export async function reportFoundId(data: {
         imageUrl: data.imageUrl,
         region: data.region,
         locationDetail: data.locationDetail,
-        notes: data.notes || null,
+        description: data.notes || null,
         reporterId: userId,
         // Construct a readable name for the finder from Clerk data
         reporterName: user?.firstName 

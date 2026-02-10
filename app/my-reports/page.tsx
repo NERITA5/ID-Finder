@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { 
   ChevronLeft, Plus, MapPin, Calendar, Trash2, 
-  CheckCircle, Loader2, Wallet, Search 
+  CheckCircle, Loader2, Wallet, Search, Sparkles 
 } from "lucide-react";
 import Link from "next/link";
 import { getUserReports, deleteReport, markAsRecovered } from "@/lib/actions";
@@ -12,7 +12,9 @@ export default function MyReportsPage() {
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"ALL" | "LOST" | "AVAILABLE" | "RETURNED">("ALL");
+  
+  // Updated filter state to include MATCHED
+  const [filter, setFilter] = useState<"ALL" | "LOST" | "MATCHED" | "AVAILABLE" | "RETURNED">("ALL");
 
   const loadData = async () => {
     setLoading(true);
@@ -31,9 +33,7 @@ export default function MyReportsPage() {
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const handleAction = async (id: string, type: 'LOST' | 'FOUND', action: "delete" | "recover") => {
     setIsProcessing(id);
@@ -54,13 +54,13 @@ export default function MyReportsPage() {
   };
 
   const filteredReports = reports.filter(r => 
-    filter === "ALL" ? true : r.status === filter || r.type === filter
+    filter === "ALL" ? true : r.status === filter || (filter === "AVAILABLE" && r.type === "FOUND")
   );
 
   return (
     <div className="max-w-md mx-auto bg-[#f4f7fe] min-h-screen pb-32 antialiased">
       
-      {/* HEADER - Updated to Blue Handwriting Style */}
+      {/* HEADER */}
       <div className="bg-[#0052cc] p-6 pt-12 pb-16 text-white rounded-b-[3rem] shadow-xl relative overflow-hidden">
         <div className="flex items-center justify-between relative z-10">
           <Link href="/dashboard" className="bg-white/10 p-2 rounded-full active:scale-95">
@@ -76,15 +76,15 @@ export default function MyReportsPage() {
 
       {/* FILTER TABS */}
       <div className="flex p-4 gap-2 overflow-x-auto no-scrollbar -mt-8 relative z-20">
-        {["ALL", "LOST", "AVAILABLE", "RETURNED"].map((t) => (
+        {["ALL", "LOST", "MATCHED", "AVAILABLE", "RETURNED"].map((t) => (
           <button
             key={t}
             onClick={() => setFilter(t as any)}
-            className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-sm border ${
+            className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-sm border whitespace-nowrap ${
               filter === t ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-white'
             }`}
           >
-            {t === "AVAILABLE" ? "Found" : t}
+            {t === "AVAILABLE" ? "Found By Me" : t}
           </button>
         ))}
       </div>
@@ -105,10 +105,10 @@ export default function MyReportsPage() {
             <div 
               key={report.id} 
               className={`bg-white p-3 rounded-[2.5rem] shadow-sm border transition-all ${
-                report.status === 'RETURNED' ? 'opacity-60 grayscale bg-slate-50' : 'border-white'
+                report.status === 'RETURNED' ? 'opacity-60 grayscale bg-slate-50' : 
+                report.status === 'MATCHED' ? 'border-blue-200 ring-4 ring-blue-50/50 scale-[1.02]' : 'border-white'
               }`}
             >
-              {/* IMAGE PREVIEW FOR FOUND ITEMS */}
               {report.imageUrl && (
                 <div className="w-full h-44 rounded-[2rem] overflow-hidden mb-3 relative">
                    <img src={report.imageUrl} className="w-full h-full object-cover" alt="ID Preview" />
@@ -120,11 +120,21 @@ export default function MyReportsPage() {
 
               <div className="px-3 pb-3">
                 <div className="flex justify-between items-start mb-3">
-                  <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${
-                    report.type === 'LOST' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
-                  }`}>
-                    {report.type === 'LOST' ? <Search className="w-3 h-3" /> : <Wallet className="w-3 h-3" />}
-                    <span className="text-[9px] font-black uppercase tracking-tighter">{report.type}</span>
+                  <div className="flex gap-2">
+                    <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${
+                      report.type === 'LOST' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
+                    }`}>
+                      {report.type === 'LOST' ? <Search className="w-3 h-3" /> : <Wallet className="w-3 h-3" />}
+                      <span className="text-[9px] font-black uppercase tracking-tighter">{report.type}</span>
+                    </div>
+
+                    {/* MATCHED BADGE */}
+                    {report.status === 'MATCHED' && (
+                      <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-blue-600 text-white animate-pulse">
+                        <Sparkles className="w-3 h-3" />
+                        <span className="text-[9px] font-black uppercase tracking-tighter">Match Found</span>
+                      </div>
+                    )}
                   </div>
                   
                   <button 
@@ -142,7 +152,7 @@ export default function MyReportsPage() {
                 <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-50 pt-4">
                   <div className="flex items-center gap-2 text-slate-400">
                     <MapPin className="w-3.5 h-3.5" />
-                    <span className="text-[10px] font-bold truncate uppercase">{report.lastLocation || report.region || 'Buea'}</span>
+                    <span className="text-[10px] font-bold truncate uppercase">{report.lastLocation || report.region || 'Unknown'}</span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-400 justify-end">
                     <Calendar className="w-3.5 h-3.5" />
@@ -153,21 +163,27 @@ export default function MyReportsPage() {
                 </div>
 
                 <div className="flex gap-2 mt-5">
-                   {report.status === 'LOST' && (
+                   {/* ACTION BUTTONS */}
+                   {(report.status === 'LOST' || report.status === 'MATCHED') && (
                      <button 
                       onClick={() => handleAction(report.id, 'LOST', "recover")}
                       disabled={isProcessing === report.id}
                       className="flex-1 bg-green-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-green-100"
                      >
                        {isProcessing === report.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3" />}
-                       Mark Recovered
+                       Found It!
                      </button>
                    )}
+
                    <Link 
-                     href={`/report/${report.id}`} 
-                     className="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-black text-[10px] uppercase text-center active:scale-95"
+                     href={report.status === 'MATCHED' ? `/notifications` : `/report/${report.id}`} 
+                     className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase text-center active:scale-95 transition-all ${
+                       report.status === 'MATCHED' 
+                       ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' 
+                       : 'bg-slate-100 text-slate-500'
+                     }`}
                    >
-                     View Details
+                     {report.status === 'MATCHED' ? "View Finder Info" : "View Details"}
                    </Link>
                 </div>
               </div>

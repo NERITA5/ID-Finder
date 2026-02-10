@@ -4,30 +4,34 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // url is now handled in prisma.config.ts
+  //url      = env("DATABASE_URL")
 }
 
 // --- ID REPORTING ---
 enum IDStatus {
   LOST
   AVAILABLE
+  MATCHED    // Added this
   RETURNED
 }
 
 model LostID {
-  id           String   @id @default(cuid())
-  userId       String   // Clerk User ID
-  idType       String   // National ID, License, etc.
-  fullName     String
-  idNumber     String?
-  placeOfBirth String?  
-  description  String?
-  imageUrl     String?
-  lastLocation String
-  qrCodeId       String?
-  dateLost     DateTime @default(now())
-  status       IDStatus @default(LOST)
-  createdAt    DateTime @default(now())
+  id            String   @id @default(cuid())
+  userId        String   // Clerk User ID
+  idType        String   
+  fullName      String
+  idNumber      String?
+  dateOfBirth   String?  
+  dateOfIssue   String?  
+  placeOfBirth  String?  
+  description   String?
+  imageUrl      String?  
+  backImageUrl  String?  
+  lastLocation  String
+  qrCodeId      String?
+  dateLost      DateTime @default(now())
+  status        IDStatus @default(LOST)
+  createdAt     DateTime @default(now())
 }
 
 model FoundID {
@@ -35,14 +39,17 @@ model FoundID {
   idType         String
   fullName       String   
   idNumber       String?  
+  dateOfBirth    String?  
+  dateOfIssue    String?  
   placeOfBirth   String?  
-  imageUrl       String
+  imageUrl       String   
+  backImageUrl   String?  
   region         String
   locationDetail String
-  notes          String?  @db.Text
+  description    String?  @db.Text // Renamed from notes for consistency
   reporterId     String   // Clerk User ID or "anonymous"
   reporterName   String?
-  status         String   @default("AVAILABLE")
+  status         IDStatus @default(AVAILABLE) // Changed to Enum for consistency
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }

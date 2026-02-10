@@ -10,8 +10,6 @@ import { v4 as uuidv4 } from "uuid";
 /**
  * 1. QR VAULT & SECURITY
  */
-
-// PUBLIC ACTION: Used by the Finder (Guest) to see if a QR is valid
 export async function getVaultBySlug(slug: string) {
   try {
     const vault = await prisma.userVault.findUnique({
@@ -61,14 +59,29 @@ export async function createLostReport(formData: {
   idType: string;
   fullName: string;
   idNumber?: string;
+  dateOfBirth?: string;
+  dateOfIssue?: string;
   placeOfBirth?: string;
   lastLocation: string;
   description: string;
+  imageUrl?: string;
   dateLost?: string;
 }) {
   try {
     const { userId } = await auth();
     if (!userId) throw new Error("Unauthorized");
+
+    const matches = await checkMatches({
+      idType: formData.idType,
+      fullName: formData.fullName,
+      idNumber: formData.idNumber,
+      dateOfBirth: formData.dateOfBirth,
+      dateOfIssue: formData.dateOfIssue,
+      placeOfBirth: formData.placeOfBirth,
+      status: "LOST", 
+    });
+
+    const initialStatus = matches && matches.length > 0 ? "MATCHED" : "LOST";
 
     const newReport = await prisma.lostID.create({
       data: {
@@ -76,37 +89,36 @@ export async function createLostReport(formData: {
         idType: formData.idType,
         fullName: formData.fullName,
         idNumber: formData.idNumber || null,
+        dateOfBirth: formData.dateOfBirth || null,
+        dateOfIssue: formData.dateOfIssue || null,
         placeOfBirth: formData.placeOfBirth || null,
         lastLocation: formData.lastLocation,
         description: formData.description,
-        status: "LOST",
+        imageUrl: formData.imageUrl || null,
+        status: initialStatus,
         dateLost: formData.dateLost ? new Date(formData.dateLost) : new Date(),
       },
     });
 
-    const matches = await checkMatches({
-      idType: formData.idType,
-      fullName: formData.fullName,
-      idNumber: formData.idNumber,
-      placeOfBirth: formData.placeOfBirth,
-      status: "LOST",
-    });
-
     if (matches && matches.length > 0) {
-      await prisma.notification.create({
+      const notification = await prisma.notification.create({
         data: {
           userId,
-          title: "Possible Match Found!",
-          message: `We found matching records for your ${formData.idType}.`,
+          title: "Instant Match Found!",
+          message: `We found ${matches.length} matching found items for your ${formData.idType}!`,
           type: "MATCH",
-          metadata: { reportId: matches[0].id } as any
+          metadata: { 
+            reportId: matches[0].id,
+            senderId: matches[0].reporterId || "system" 
+          } as any
         },
       });
-      await pusherServer.trigger(`user-alerts-${userId}`, "new-notification", {});
+      await pusherServer.trigger(`user-alerts-${userId}`, "new-notification", notification);
     }
 
     revalidatePath("/dashboard");
     revalidatePath("/my-reports");
+    revalidatePath("/notifications");
     return { success: true, id: newReport.id, matchCount: matches?.length || 0 };
   } catch (error) {
     console.error("Lost Report Error:", error);
@@ -118,13 +130,16 @@ export async function reportFoundId(formData: {
   idType: string;
   fullName: string;
   idNumber?: string;
+  dateOfBirth?: string;
+  dateOfIssue?: string;
   placeOfBirth?: string;
   imageUrl: string;
+  backImageUrl?: string;
   region: string;
   locationDetail: string;
   reporterName: string;
-  targetOwnerId?: string; // Derived from scanning the QR
-  vaultSlug?: string;     // Added: the QR slug itself
+  targetOwnerId?: string; 
+  vaultSlug?: string;     
 }) {
   try {
     const { userId: reporterId } = await auth();
@@ -134,8 +149,11 @@ export async function reportFoundId(formData: {
         idType: formData.idType,
         fullName: formData.fullName,
         idNumber: formData.idNumber || null,
+        dateOfBirth: formData.dateOfBirth || null,
+        dateOfIssue: formData.dateOfIssue || null,
         placeOfBirth: formData.placeOfBirth || null,
         imageUrl: formData.imageUrl,
+        backImageUrl: formData.backImageUrl || null,
         region: formData.region,
         locationDetail: formData.locationDetail,
         reporterName: formData.reporterName,
@@ -144,9 +162,9 @@ export async function reportFoundId(formData: {
       },
     });
 
-    // 1. Direct Notification if QR was scanned
+    // 1. QR Scan Logic
     if (formData.targetOwnerId) {
-      await prisma.notification.create({
+      const notification = await prisma.notification.create({
         data: {
           userId: formData.targetOwnerId,
           title: "Your Protected ID was Found!",
@@ -159,44 +177,57 @@ export async function reportFoundId(formData: {
           } as any
         }
       });
-      await pusherServer.trigger(`user-alerts-${formData.targetOwnerId}`, "new-notification", {});
+
+      await prisma.lostID.updateMany({
+        where: { userId: formData.targetOwnerId, idType: formData.idType, status: "LOST" },
+        data: { status: "MATCHED" }
+      });
+
+      await pusherServer.trigger(`user-alerts-${formData.targetOwnerId}`, "new-notification", notification);
     }
 
     // 2. Global Matching
-    const directMatches = await prisma.lostID.findMany({
-      where: {
-        idType: formData.idType,
-        status: "LOST",
-        OR: [
-          { idNumber: formData.idNumber },
-          { fullName: { contains: formData.fullName, mode: 'insensitive' } }
-        ]
-      }
+    const matches = await checkMatches({
+      idType: formData.idType,
+      fullName: formData.fullName,
+      idNumber: formData.idNumber,
+      dateOfBirth: formData.dateOfBirth,
+      dateOfIssue: formData.dateOfIssue,
+      placeOfBirth: formData.placeOfBirth,
+      status: "FOUND",
     });
 
-    if (directMatches.length > 0) {
+    if (matches.length > 0) {
       await Promise.all(
-        directMatches.map(async (match) => {
+        matches.map(async (match) => {
+          await prisma.lostID.update({
+            where: { id: match.id },
+            data: { status: "MATCHED" }
+          });
+
           if (match.userId === formData.targetOwnerId) return;
 
-          await prisma.notification.create({
+          const notification = await prisma.notification.create({
             data: {
               userId: match.userId,
-              title: "Possible ID Match Found!",
-              message: `A ${formData.idType} matching your name was found in ${formData.region}.`,
+              title: "We Found a Match!",
+              message: `A ${formData.idType} matching your details was found in ${formData.region}.`,
               type: "MATCH",
-              metadata: { reportId: newFoundItem.id, senderId: reporterId || "anonymous" } as any
+              metadata: { 
+                reportId: newFoundItem.id, 
+                senderId: reporterId || "anonymous" 
+              } as any
             },
           });
-          await pusherServer.trigger(`user-alerts-${match.userId}`, "new-notification", {});
+          await pusherServer.trigger(`user-alerts-${match.userId}`, "new-notification", notification);
         })
       );
     }
 
     revalidatePath("/dashboard");
     revalidatePath("/my-reports");
-    revalidatePath("/search");
-    return { success: true, matchCount: directMatches.length };
+    revalidatePath("/notifications");
+    return { success: true, matchCount: matches.length };
   } catch (error) {
     console.error("Found ID Error:", error);
     return { success: false };
@@ -204,7 +235,7 @@ export async function reportFoundId(formData: {
 }
 
 /**
- * 3. NOTIFICATIONS & CHAT
+ * 3. NOTIFICATIONS & UTILS
  */
 export async function getNotifications() {
   const { userId } = await auth();
@@ -223,8 +254,18 @@ export async function markNotificationsAsRead() {
     data: { isRead: true },
   });
   revalidatePath("/dashboard");
+  revalidatePath("/notifications");
 }
 
+export async function clearAllNotifications() {
+  const { userId } = await auth();
+  if (!userId) return { success: false };
+  await prisma.notification.deleteMany({ where: { userId } });
+  revalidatePath("/notifications");
+  return { success: true };
+}
+
+// ... rest of your chat and search functions remain the same
 export async function startChat(reportId: string, targetUserId: string) {
   try {
     const { userId: currentUserId } = await auth();
@@ -232,7 +273,9 @@ export async function startChat(reportId: string, targetUserId: string) {
     if (currentUserId === targetUserId) throw new Error("Self-chat disabled");
 
     let chat = await prisma.chat.findFirst({
-      where: { participants: { hasEvery: [currentUserId, targetUserId] } }
+      where: { 
+        participants: { hasEvery: [currentUserId, targetUserId] } 
+      }
     });
 
     if (!chat) {
@@ -297,9 +340,6 @@ export async function getChatMessages(chatId: string) {
   });
 }
 
-/**
- * 4. SEARCH & MANAGEMENT
- */
 export async function getReportById(id: string) {
   try {
     let report = await prisma.lostID.findUnique({ where: { id } });
@@ -328,6 +368,7 @@ export async function searchReports(query: string) {
         { fullName: { contains: query, mode: 'insensitive' } },
         { idNumber: { contains: query, mode: 'insensitive' } },
         { idType: { contains: query, mode: 'insensitive' } },
+        { placeOfBirth: { contains: query, mode: 'insensitive' } },
       ],
     },
     orderBy: { createdAt: 'desc' },

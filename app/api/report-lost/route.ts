@@ -17,6 +17,9 @@ export async function POST(req: Request) {
       idType, 
       fullName, 
       idNumber, 
+      dateOfBirth,   // NEW
+      dateOfIssue,   // NEW
+      placeOfBirth,  // NEW
       description, 
       imageUrl, 
       lastLocation, 
@@ -25,12 +28,16 @@ export async function POST(req: Request) {
     } = body;
 
     // 3. Create the Lost ID Record in PostgreSQL
+    // This stores the data exactly as the user typed it for the owner's record
     const lostRecord = await prisma.lostID.create({
       data: {
         userId,
         idType,
         fullName,
         idNumber: idNumber || null,
+        dateOfBirth: dateOfBirth || null,   // NEW
+        dateOfIssue: dateOfIssue || null,   // NEW
+        placeOfBirth: placeOfBirth || null, // NEW
         description: description || "",
         imageUrl: imageUrl || null,
         lastLocation,
@@ -41,11 +48,15 @@ export async function POST(req: Request) {
     });
 
     // 4. TRIGGER AUTO-MATCH ENGINE
-    // FIXED: Added idType and status to match the utility's expected object structure
+    // We pass ALL fields to the matcher. 
+    // The matcher handles .toLowerCase() so it's NOT case-sensitive.
     const potentialMatches = await checkMatches({ 
       fullName, 
       idNumber, 
       idType, 
+      dateOfBirth,
+      dateOfIssue,
+      placeOfBirth,
       status: "LOST" 
     });
 
@@ -56,8 +67,8 @@ export async function POST(req: Request) {
       matchFound: potentialMatches.length > 0,
       matches: potentialMatches,
       message: potentialMatches.length > 0 
-        ? `We found ${potentialMatches.length} potential matches for your ID!` 
-        : "Report filed. We will notify you when a match is found."
+        ? `Great news! We found ${potentialMatches.length} potential matches for your ID!` 
+        : "Report filed successfully. We will notify you the moment a match is found."
     });
 
   } catch (error) {
