@@ -78,10 +78,11 @@ export async function createLostReport(formData: {
       dateOfBirth: formData.dateOfBirth,
       dateOfIssue: formData.dateOfIssue,
       placeOfBirth: formData.placeOfBirth,
-      status: "LOST", 
+      status: "LOST", // Tells matcher to search the FoundID table
     });
 
-    const initialStatus = matches && matches.length > 0 ? "MATCHED" : "LOST";
+    const hasMatch = matches && matches.length > 0;
+    const initialStatus = hasMatch ? "MATCHED" : "LOST";
 
     const newReport = await prisma.lostID.create({
       data: {
@@ -100,27 +101,49 @@ export async function createLostReport(formData: {
       },
     });
 
-    // If matches found, notify the person who just reported it lost
-    if (matches && matches.length > 0) {
-      const notification = await prisma.notification.create({
-        data: {
-          userId,
-          title: "Instant Match Found!",
-          message: `We found ${matches.length} matching item(s) already in our registry!`,
-          type: "MATCH",
-          metadata: { 
-            reportId: matches[0].id,
-            senderId: matches[0].reporterId || "system" 
-          } as any
-        },
-      });
-      await pusherServer.trigger(`user-alerts-${userId}`, "new-notification", notification);
+    // If matches found, notify both the Owner and the Finder(s)
+    if (hasMatch) {
+      await Promise.all(
+        matches.map(async (match) => {
+          // Update the existing Found item to MATCHED
+          await prisma.foundID.update({
+            where: { id: match.id },
+            data: { status: "MATCHED" as any }
+          });
+
+          // Notify the person who just reported it Lost (The Owner)
+          const ownerNotification = await prisma.notification.create({
+            data: {
+              userId,
+              title: "Instant Match Found!",
+              message: `A ${formData.idType} matching your details was already reported found in ${match.region}.`,
+              type: "MATCH",
+              metadata: { reportId: match.id, senderId: match.reporterId } as any
+            },
+          });
+          await pusherServer.trigger(`user-alerts-${userId}`, "new-notification", ownerNotification);
+
+          // Notify the Finder (If they are a registered user)
+          if (match.reporterId && match.reporterId !== "anonymous") {
+            const finderNotification = await prisma.notification.create({
+              data: {
+                userId: match.reporterId,
+                title: "Your Found Item was Claimed!",
+                message: `The owner of the ${formData.idType} you found has just reported it lost.`,
+                type: "MATCH",
+                metadata: { reportId: newReport.id, senderId: userId } as any
+              },
+            });
+            await pusherServer.trigger(`user-alerts-${match.reporterId}`, "new-notification", finderNotification);
+          }
+        })
+      );
     }
 
+    revalidatePath("/");
     revalidatePath("/dashboard");
     revalidatePath("/my-reports");
-    revalidatePath("/notifications");
-    return { success: true, id: newReport.id, matchCount: matches?.length || 0 };
+    return { success: true, id: newReport.id, matchCreated: hasMatch, matchCount: matches?.length || 0 };
   } catch (error) {
     console.error("Lost Report Error:", error);
     return { success: false, error: "Database submission failed" };
@@ -165,7 +188,7 @@ export async function reportFoundId(formData: {
 
     let matchCreated = false;
 
-    // 1. DIRECT QR SCAN LOGIC (High Priority)
+    // 1. DIRECT QR SCAN LOGIC
     if (formData.targetOwnerId) {
       matchCreated = true;
       const notification = await prisma.notification.create({
@@ -182,9 +205,16 @@ export async function reportFoundId(formData: {
         }
       });
 
+      // Update any corresponding LOST records for this user
       await prisma.lostID.updateMany({
         where: { userId: formData.targetOwnerId, idType: formData.idType, status: "LOST" },
         data: { status: "MATCHED" }
+      });
+
+      // Mark the found item itself as matched
+      await prisma.foundID.update({
+        where: { id: newFoundItem.id },
+        data: { status: "MATCHED" as any }
       });
 
       await pusherServer.trigger(`user-alerts-${formData.targetOwnerId}`, "new-notification", notification);
@@ -198,7 +228,7 @@ export async function reportFoundId(formData: {
       dateOfBirth: formData.dateOfBirth,
       dateOfIssue: formData.dateOfIssue,
       placeOfBirth: formData.placeOfBirth,
-      status: "FOUND",
+      status: "FOUND", // Tells matcher to search the LostID table
     });
 
     if (matches.length > 0) {
@@ -210,7 +240,12 @@ export async function reportFoundId(formData: {
             data: { status: "MATCHED" }
           });
 
-          // Skip if we already notified via QR
+          // Mark current item as matched
+          await prisma.foundID.update({
+            where: { id: newFoundItem.id },
+            data: { status: "MATCHED" as any }
+          });
+
           if (match.userId === formData.targetOwnerId) return;
 
           const notification = await prisma.notification.create({
@@ -230,9 +265,9 @@ export async function reportFoundId(formData: {
       );
     }
 
+    revalidatePath("/");
     revalidatePath("/dashboard");
     revalidatePath("/my-reports");
-    revalidatePath("/notifications");
     return { success: true, matchCreated, matchCount: matches.length };
   } catch (error) {
     console.error("Found ID Error:", error);
@@ -246,8 +281,7 @@ export async function reportFoundId(formData: {
 export async function startChat(reportId: string, targetUserId: string) {
   try {
     const { userId: currentUserId } = await auth();
-    if (!currentUserId) throw new Error("Unauthorized");
-    if (currentUserId === targetUserId) throw new Error("Self-chat disabled");
+    if (!currentUserId || currentUserId === targetUserId) throw new Error("Invalid chat request");
 
     let chat = await prisma.chat.findFirst({
       where: { 
@@ -433,7 +467,9 @@ export async function getUserReports() {
 
 export async function getRecentReports() {
   return await prisma.lostID.findMany({
-    where: { status: "LOST" },
+    where: { 
+      status: { in: ["LOST", "MATCHED"] } 
+    },
     orderBy: { createdAt: 'desc' },
     take: 10,
   });
